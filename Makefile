@@ -12,7 +12,7 @@
 .PHONY: all publish clean update-explainer-toc
 .SUFFIXES: .bs .html
 
-all: publish update-explainer-toc
+all: update-explainer-toc
 
 clean:
 	rm -rf build *~
