@@ -78,17 +78,20 @@ It is an interesting possibility, but not yet done, to integrate solutions for:
 
 ## Relying Party API, Getting a Credential
 
-The site that the user wants to log into needs to call the already existing method `navigator.credentials.get()`. We put our arguments under a new key in the options argument, `'cross-site'`.
+The site that the user wants to log into needs to call the already existing method `navigator.credentials.get()`. We put our arguments under the existing key in the options argument, `'identity'`.
 While not shown here, this can be combined with arbitrary other credential arguments.
 
 ```js
 let credential = await navigator.credentials.get({
-  'cross-site' : {
-    'allow-redirect' : true,
+  'identity' : {
+    // Optionally:
+    // 'mode': 'button', // currently implies login_target: popup
     'providers' : [
       {
-        "auth-origin": "https://login.idp.net",
-        "auth-link": "https://bounce.example.com/?u=https://login.idp.net/login.html",
+        "origin": "https://login.idp.net",
+        'login_url': 'https://bounce.example.com/?u=https://login.idp.net/login.html',
+        // This is intended to allow for more flexible login flows beyond what "button mode" offers.
+        'login_target': 'popup | redirect',
       },
     ]
   }
