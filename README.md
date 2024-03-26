@@ -172,13 +172,13 @@ An identity provider may also provide either an allowlist of domains or an HTTP-
 let cred = await navigator.credentials.create({
   "cross-site" : {
     "origin-allowlist": ["https://rp1.biz", "https://rp2.info"], // optional
-    "dynamic-via-cors": "https://api.login.idp.net/v1/foo", // optional, but may fail after the user has selected the credential 
+    "dynamic-via-cors": "https://api.login.idp.net/v1/foo", // optional
   }
 });
 await navigator.credentials.store(cred);
 ```
 
-This allows the IDP to be used without a redirect flow if the user has already logged in. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser, but may fail after it is selected if the link is not also provided by the RP on collection. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
+This allows the IDP to be used without a redirect flow if the user has already logged in. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser if pthe same link is provided by the IDP and then a browser-initiated CORS request with `Sec-Fetch-Dest: webidentity` is successful. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
 
 This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. However, if the user has not visited any of the supported identity providers, then the relying party will still have to present some direction to get the user to their identity provider, and a NASCAR page is a good option.
 
