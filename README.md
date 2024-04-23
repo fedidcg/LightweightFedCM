@@ -182,6 +182,38 @@ This allows the IDP to be used without a redirect flow if the user has already l
 
 This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. However, if the user has not visited any of the supported identity providers, then the relying party will still have to present some direction to get the user to their identity provider, and a NASCAR page is a good option.
 
+## Identity Provider API, Attaching Account Information to a Credential
+
+We add optional fields to facilitate the user's selection of the credential from the credential chooser. These match the fields in the `CredentialDataMixin` from the `Credential Management Level 1` spec. 
+
+```js
+let cred = await navigator.credentials.create({
+  "cross-site" : {
+    "dynamic-via-cors": "https://api.login.idp.net/v1/foo",
+    "name": "example human readable",
+    "iconURL": "https://api.login.idp.net/v1/photos/exampleUser",
+  }
+});
+await navigator.credentials.store(cred);
+```
+
+The browser should use this information, along with the Origin of the identity provider to construct an entry to the credential chooser that clearly communicates its meaning to the user. In the absence of these fields (or where this function has not yet been called) the identity provider's favicon and Site may be used.
+
+We also add optional fields to allow the identity provider to restrict the lifetime of a Credential's user data, in case there are freshness requirements or deletion requirements on the identity provider. Storing a credential with a falsy value for username or iconURL should delete the previous value in the credential store.
+The identity provider can also supply a time at which the account information should expire, as follows:
+
+```js
+let cred = await navigator.credentials.create({
+  "cross-site" : {
+    "dynamic-via-cors": "https://api.login.idp.net/v1/foo",
+    "name": "example human readable",
+    "iconURL": "https://api.login.idp.net/v1/photos/exampleUser",
+    "ui-hints-expire": "2025-01-01", // RFC 3339 date-time that is the last time the name and iconURL can be used. After this they are "empty"
+  }
+});
+await navigator.credentials.store(cred);
+```
+
 
 ## Key scenarios
 
