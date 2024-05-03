@@ -139,13 +139,14 @@ navigator.credentials.get({
 
 ## Relying Party API, Using a Credential
 
-The RP can now access the credential as it would with FedCM:
+The RP can use the credential as an object once it is obtained as it would with FedCM, or as any other Credential. 
 
 ```js
-let credential = await navigator.credentials.get();
+let credential = await navigator.credentials.get({
+  identity: {providers: {origin: "https://login.idp.net"}}});
 ```
 
-Instead of handling the credential, the RP can also delegate the capability for Storage Access to the IdP
+To use cross site cookies, if the credential has been gotten by the RP in the past, then we can delegate to the Storage Access API to use this as a trust signal to prevent a permission dialog.
 
 ```js
 // Inside of an idp.net iframe
