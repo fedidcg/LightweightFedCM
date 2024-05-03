@@ -153,7 +153,7 @@ With a Credential object in hand, a document can enable access to third-party un
 
 ```js
 let credential = await navigator.credentials.get(opts);
-await document.requestStorageAccess("cross-site" : credential);
+await document.requestStorageAccess({"cross-site" : credential});
 ```
 
 The cookie access granted here should be identical to that of the Storage Access API, but provide the origin of the identity provider the credential corresponds to access to its cookies on the calling Document.
@@ -178,9 +178,9 @@ An identity provider may also provide either an allowlist of domains or an HTTP-
 
 ```js
 let cred = await navigator.credentials.create({
-  "identity" : {
-    "origin-allowlist": ["https://rp1.biz", "https://rp2.info"], // optional
-    "dynamic-via-cors": "https://api.login.idp.net/v1/foo", // optional
+  identity : {
+    origin_allowlist: ["https://rp1.biz", "https://rp2.info"], // optional
+    dynamic_via_cors: "https://api.login.idp.net/v1/foo", // optional
   }
 });
 await navigator.credentials.store(cred);
@@ -196,10 +196,12 @@ We add optional fields to facilitate the user's selection of the credential from
 
 ```js
 let cred = await navigator.credentials.create({
-  "identity" : {
-    "dynamic-via-cors": "https://api.login.idp.net/v1/foo",
-    "name": "example human readable",
-    "iconURL": "https://api.login.idp.net/v1/photos/exampleUser",
+  identity : {
+    dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+    ui_hint: {
+      name: "example human readable",
+      icon: "https://api.login.idp.net/v1/photos/exampleUser",
+    }
   }
 });
 await navigator.credentials.store(cred);
@@ -212,11 +214,13 @@ The identity provider can also supply a time at which the account information sh
 
 ```js
 let cred = await navigator.credentials.create({
-  "identity" : {
-    "dynamic-via-cors": "https://api.login.idp.net/v1/foo",
-    "name": "example human readable",
-    "iconURL": "https://api.login.idp.net/v1/photos/exampleUser",
-    "ui-hints-expire": "2025-01-01", // RFC 3339 date-time that is the last time the name and iconURL can be used. After this they are "empty"
+	identity : {
+    dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+    ui_hint: {
+      name: "example human readable",
+      icon: "https://api.login.idp.net/v1/photos/exampleUser",
+      expires: "2025-01-01", // RFC 3339 date-time that is the last time the name and iconURL can be used. After this they are "empty"
+    }
   }
 });
 await navigator.credentials.store(cred);
@@ -233,10 +237,10 @@ In this case, our user has not used this identity provider (idp.net) on this sit
 
 ```js
 let credential = await navigator.credentials.get({
-  'identity' : {
-    'providers' : [
+  identity : {
+    providers : [
       {
-        "login_url" : "https://login.idp.net/login.html",
+        login_url : "https://login.idp.net/login.html",
       },
     ]
   }
@@ -262,7 +266,7 @@ Upon return to the site to be logged into, the site runs the following:
 let credentials = IdentityCredential.requests.getAllowed();
 for (let credential in credentials) {
   navigator.credentials.store(credential);
-  await document.requestStorageAccess("cross-site" : credential);
+  await document.requestStorageAccess({"cross-site" : credential});
   performLoggedInActions();
 }
 ````
@@ -275,8 +279,8 @@ As a prerequisite to this scenario, when the user logged into its identity provi
 
 ```js
 let cred = await navigator.credentials.create({
-  "identity" : {
-    "dynamic_via_cors": "https://api.login.idp.net/v1/foo", 
+  identity : {
+    dynamic_via_cors: "https://api.login.idp.net/v1/foo", 
   }
 });
 await navigator.credentials.store(cred);
@@ -300,7 +304,7 @@ let credential = await navigator.credentials.get({
 However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned. Then the site runs the following:
 
 ```js
-await document.requestStorageAccess("cross-site" : credential);
+await document.requestStorageAccess({"cross-site" : credential});
 performLoggedInActions();
 await navigator.credentials.store(credential);
 ```
@@ -314,16 +318,16 @@ The page then calls the following:
 
 ```js
 let credential = await navigator.credentials.get({
-  'password': true,
-  'identity' : {
-    'providers' : [
+  password: true,
+  identity : {
+    providers : [
       {
-        "dynamic-via-cors": "https://api.login.idp.net/v1/foo",
-        "origin": "https://login.idp.net",
+        dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+        origin: "https://login.idp.net",
       },
       // ... many allowed ...	
       {
-        "origin": "https://auth.example.biz",
+        origin: "https://auth.example.biz",
       },
     ]
   }
@@ -335,7 +339,7 @@ Then the user is given any identity provider from the list that they have alread
 Then the site can run the following to get and use storage access.
 
 ```js
-await document.requestStorageAccess("cross-site" : credential);
+await document.requestStorageAccess({"cross-site" : credential});
 performLoggedInActions();
 await navigator.credentials.store(credential);
 ```
