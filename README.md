@@ -7,6 +7,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 ## Authors:
 
 - Benjamin VanderSloot (Mozilla)
+- Johann Hofmann (Google Chrome)
 
 ## Participate
 - https://github.com/fedidcg/CrossSiteCookieAccessCredential/issues
@@ -136,43 +137,31 @@ navigator.credentials.get({
 })
 ```
 
-## Relying Party API, Finishing the Creation of a Credential
-
-One odd hiccup we have is finishing the creation of a credential. While we can collect credentials from the credential store easily enough, our credential's discovery requires navigation away from the current document, leaving before the Promise returned from `navigator.credentials.get` can resolve. Therefore, we have one extra API endpoint to facilitate the collection of those credentials that have just been discovered and lets us store them in the credential store, as shown below.
-
-```js
-let credentials = IdentityCredential.requests.getAllowed();
-for (let cred in credentials) {
-  navigator.credentials.store(cred);
-}
-````
-
 ## Relying Party API, Using a Credential
 
-With a Credential object in hand, a document can enable access to third-party unpartitioned cookies for a given origin with a single call. The credential must be same-site to the page which created it.
+The RP can now access the credential as it would with FedCM:
 
 ```js
-let credential = await navigator.credentials.get(opts);
-await document.requestStorageAccess({"cross-site" : credential});
+let credential = await navigator.credentials.get();
 ```
 
-The cookie access granted here should be identical to that of the Storage Access API, but provide the origin of the identity provider the credential corresponds to access to its cookies on the calling Document.
+Instead of handling the credential, the RP can also delegate the capability for Storage Access to the IdP
 
-## Identity Provider API, Allowing a Credential's Creation During Redirect Flow
+```js
+// Inside of an idp.net iframe
+await document.requestStorageAccess();
+```
 
-Credentials of this type are powerful, allowing third-party cookies to be sent for an origin that does not actively have a navigatable in the current navigatable tree. As such, we have to devise a new way for the identity provider to exhert control over which sites may create its credentials. There are two functions that enable this, both used in this code example:
+## Understanding which RPs to store credentials for
 
 ```js
 for (let r in await IdentityCredential.requests.pending()) {
-  if (IDP_DEFINED_ALLOW_SITE(r.origin)) {
-    IdentityCredential.requests.allow(r);
-  }
 }
 ```
 
 Here the identity provider chooses which sites may be valid relying parties dynamically from its own page, via the function `IDP_DEFINED_ALLOW_SITE`, after enumerating all pending requests that exist for their use as an identity provider. 
 
-## Identity Provider API, Creating a Credential Creation For Many Relying Parties In Advance
+## Identity Provider API, Creating a Credential
 
 An identity provider may also provide either an allowlist of domains or an HTTP-endpoint that will reply with a success to a CORS requests from allowed relying parties to create and store a Credential that will be effective for several relying parties in advance. 
 
@@ -251,11 +240,16 @@ Browser UI is shown to the user that lets them pick to link their account to the
 There, the user may do some auth flow and on completion, the identity provider calls the following:
 
 ```js
-for (let r in await IdentityCredential.requests.pending()) {
-  if (r.origin == AUTHORIZIONG_ORIGIN) {
-    IdentityCredential.requests.allow(r);
+let cred = await navigator.credentials.create({
+  identity : {
+    dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+    ui_hint: {
+      name: "example human readable",
+      icon: "https://api.login.idp.net/v1/photos/exampleUser",
+    }
   }
-}
+});
+navigator.credentials.store(cred);
 location.href = RETURN_TO_PAGE; // example.com page
 ```
 
@@ -263,13 +257,17 @@ This stores a new Credential in the Credential Store and enables a silent access
 Upon return to the site to be logged into, the site runs the following:
 
 ```js
-let credentials = IdentityCredential.requests.getAllowed();
-for (let credential in credentials) {
-  navigator.credentials.store(credential);
-  await document.requestStorageAccess({"cross-site" : credential});
-  performLoggedInActions();
-}
+let credential = await navigator.credentials.get({
+  identity : {
+    providers : [
+      {
+        origin: "https://login.idp.net",
+      },
+  }
+});
 ````
+
+or embeds an IdP iframe or other resources that want to access unpartitioned cross-site storage.
 
 This can be run on every page load as it is guaranteed to provide no browser UI and provides the cross-site unpartitioned storage access desired.
 
@@ -301,13 +299,7 @@ let credential = await navigator.credentials.get({
 });
 ```
 
-However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned. Then the site runs the following:
-
-```js
-await document.requestStorageAccess({"cross-site" : credential});
-performLoggedInActions();
-await navigator.credentials.store(credential);
-```
+However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned.
 
 ### Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider
 
@@ -335,14 +327,6 @@ let credential = await navigator.credentials.get({
 ```
 
 Then the user is given any identity provider from the list that they have already linked, any identity providers they have visited and stored themselves in the credential store, and password manager entries as options in the browser UI. Whichever is selected is returned. Note also that depending on the credential manager state, request details, and if only one credential is collected from the store, the UI may be elided. See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements).
-
-Then the site can run the following to get and use storage access.
-
-```js
-await document.requestStorageAccess({"cross-site" : credential});
-performLoggedInActions();
-await navigator.credentials.store(credential);
-```
 
 ## Detailed design discussion
 
@@ -415,7 +399,6 @@ Many thanks for valuable feedback and advice from:
 - George Fletcher
 - Sam Goto
 - Yi Gu
-- Johann Hoffmann
 - Nicolas Peña Moreno
 - Achim Schlosser
 - Phil Smart
