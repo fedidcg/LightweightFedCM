@@ -7,6 +7,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 ## Authors:
 
 - Benjamin VanderSloot (Mozilla)
+- Johann Hofmann (Google Chrome)
 
 ## Participate
 - https://github.com/fedidcg/CrossSiteCookieAccessCredential/issues
@@ -136,43 +137,23 @@ navigator.credentials.get({
 })
 ```
 
-## Relying Party API, Finishing the Creation of a Credential
-
-One odd hiccup we have is finishing the creation of a credential. While we can collect credentials from the credential store easily enough, our credential's discovery requires navigation away from the current document, leaving before the Promise returned from `navigator.credentials.get` can resolve. Therefore, we have one extra API endpoint to facilitate the collection of those credentials that have just been discovered and lets us store them in the credential store, as shown below.
-
-```js
-let credentials = IdentityCredential.requests.getAllowed();
-for (let cred in credentials) {
-  navigator.credentials.store(cred);
-}
-````
-
 ## Relying Party API, Using a Credential
 
-With a Credential object in hand, a document can enable access to third-party unpartitioned cookies for a given origin with a single call. The credential must be same-site to the page which created it.
+The RP can use the credential as an object once it is obtained as it would with FedCM, or as any other Credential. 
 
 ```js
-let credential = await navigator.credentials.get(opts);
-await document.requestStorageAccess({"cross-site" : credential});
+let credential = await navigator.credentials.get({
+  identity: {providers: {origin: "https://login.idp.net"}}});
 ```
 
-The cookie access granted here should be identical to that of the Storage Access API, but provide the origin of the identity provider the credential corresponds to access to its cookies on the calling Document.
-
-## Identity Provider API, Allowing a Credential's Creation During Redirect Flow
-
-Credentials of this type are powerful, allowing third-party cookies to be sent for an origin that does not actively have a navigatable in the current navigatable tree. As such, we have to devise a new way for the identity provider to exhert control over which sites may create its credentials. There are two functions that enable this, both used in this code example:
+To use cross site cookies, if the credential has been gotten by the RP in the past, then we can delegate to the Storage Access API to use this as a trust signal to prevent a permission dialog.
 
 ```js
-for (let r in await IdentityCredential.requests.pending()) {
-  if (IDP_DEFINED_ALLOW_SITE(r.origin)) {
-    IdentityCredential.requests.allow(r);
-  }
-}
+// Inside of an idp.net iframe
+await document.requestStorageAccess();
 ```
 
-Here the identity provider chooses which sites may be valid relying parties dynamically from its own page, via the function `IDP_DEFINED_ALLOW_SITE`, after enumerating all pending requests that exist for their use as an identity provider. 
-
-## Identity Provider API, Creating a Credential Creation For Many Relying Parties In Advance
+## Identity Provider API, Creating a Credential
 
 An identity provider may also provide either an allowlist of domains or an HTTP-endpoint that will reply with a success to a CORS requests from allowed relying parties to create and store a Credential that will be effective for several relying parties in advance. 
 
@@ -189,6 +170,27 @@ await navigator.credentials.store(cred);
 This allows the IDP to be used without a redirect flow if the user has already logged in. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser if the same link is provided by the IDP and then a browser-initiated CORS request with `Sec-Fetch-Dest: webidentity` is successful. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
 
 This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. However, if the user has not visited any of the supported identity providers, then the relying party will still have to present some direction to get the user to their identity provider, and a NASCAR page is a good option.
+
+
+## Understanding which relying parties to store credentials for
+
+If the user wants to link an IDP that did not already store a valid credential for that origin, the user will find themselves navigated to that `login_url`. In this case, the IDP will want to evaluate the origin of the relying party and then construct and store a credential for that relying party if it so chooses.
+
+```js
+for (let r in await IdentityCredential.pendingRequests()) {
+  if (IDP_DEFINED_ALLOW_SITE(r.origin)) {
+    let cred = await navigator.credentials.create({
+      identity : {
+        origin_allowlist: [r.origin],
+      }
+    });
+    navigator.credentials.store(cred);
+  }
+}
+```
+
+Here the identity provider chooses which sites may be valid relying parties dynamically from its own page, via the function `IDP_DEFINED_ALLOW_SITE`, after enumerating all pending requests that exist for their use as an identity provider. Those pending requests should have a short lifetime, probably no longer than an hour.
+
 
 ## Identity Provider API, Attaching Account Information to a Credential
 
@@ -251,11 +253,16 @@ Browser UI is shown to the user that lets them pick to link their account to the
 There, the user may do some auth flow and on completion, the identity provider calls the following:
 
 ```js
-for (let r in await IdentityCredential.requests.pending()) {
-  if (r.origin == AUTHORIZIONG_ORIGIN) {
-    IdentityCredential.requests.allow(r);
+let cred = await navigator.credentials.create({
+  identity : {
+    dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+    ui_hint: {
+      name: "example human readable",
+      icon: "https://api.login.idp.net/v1/photos/exampleUser",
+    }
   }
-}
+});
+navigator.credentials.store(cred);
 location.href = RETURN_TO_PAGE; // example.com page
 ```
 
@@ -263,13 +270,17 @@ This stores a new Credential in the Credential Store and enables a silent access
 Upon return to the site to be logged into, the site runs the following:
 
 ```js
-let credentials = IdentityCredential.requests.getAllowed();
-for (let credential in credentials) {
-  navigator.credentials.store(credential);
-  await document.requestStorageAccess({"cross-site" : credential});
-  performLoggedInActions();
-}
+let credential = await navigator.credentials.get({
+  identity : {
+    providers : [
+      {
+        origin: "https://login.idp.net",
+      },
+  }
+});
 ````
+
+or embeds an IdP iframe or other resources that want to access unpartitioned cross-site storage.
 
 This can be run on every page load as it is guaranteed to provide no browser UI and provides the cross-site unpartitioned storage access desired.
 
@@ -301,13 +312,7 @@ let credential = await navigator.credentials.get({
 });
 ```
 
-However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned. Then the site runs the following:
-
-```js
-await document.requestStorageAccess({"cross-site" : credential});
-performLoggedInActions();
-await navigator.credentials.store(credential);
-```
+However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned.
 
 ### Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider
 
@@ -336,14 +341,6 @@ let credential = await navigator.credentials.get({
 
 Then the user is given any identity provider from the list that they have already linked, any identity providers they have visited and stored themselves in the credential store, and password manager entries as options in the browser UI. Whichever is selected is returned. Note also that depending on the credential manager state, request details, and if only one credential is collected from the store, the UI may be elided. See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements).
 
-Then the site can run the following to get and use storage access.
-
-```js
-await document.requestStorageAccess({"cross-site" : credential});
-performLoggedInActions();
-await navigator.credentials.store(credential);
-```
-
 ## Detailed design discussion
 
 ### A light touch from the browser
@@ -364,9 +361,9 @@ The answer lies in a constraint that the identity provider needs to pick and cho
 
 The credential provides cookie access to just the identity provider's origin. The security benefits of this are discussed elsewhere. We relax constraints on the relying party to site-scoping because login pages can reasonably be on different subdomains than the rest of the site. Because of the natural site-scoping of cookies, this has no privacy impact.
 
-### Scope of the `crossSiteRequests` and lifetime of those requests
+### Scope of the `IdentityCredential.pendingRequests()` and lifetime of those requests
 
-The pending and allowed requests of the `crossSiteRequests` interface is partitioned by top-level navigatable to preserve contextual integrity of the login flow. This means that popup flows are explicitly out of scope. We also dictate that the lifetime of a request should be at most an hour to prevent persistent tracking if a user backs out of an account linkage. Notably the pre-allowed identity providers are not partitioned by navigatable and are instead global.
+The pending requests of the `pendingRequests` interface is partitioned by top-level navigatable to preserve contextual integrity of the login flow. This means that popup flows are explicitly out of scope. We also dictate that the lifetime of a request should be at most an hour to prevent persistent tracking if a user backs out of an account linkage. Notably the pre-allowed identity providers are not partitioned by navigatable and are instead global.
 
 ### UI Considerations and identity provider origin
 
@@ -415,7 +412,6 @@ Many thanks for valuable feedback and advice from:
 - George Fletcher
 - Sam Goto
 - Yi Gu
-- Johann Hoffmann
 - Nicolas Peña Moreno
 - Achim Schlosser
 - Phil Smart
