@@ -155,19 +155,19 @@ await document.requestStorageAccess();
 
 ## Identity Provider API, Creating a Credential
 
-An identity provider may also provide either an allowlist of domains or an HTTP-endpoint that will reply with a success to a CORS requests from allowed relying parties to create and store a Credential that will be effective for several relying parties in advance. 
+The identity provider needs to specify at least one of two arguments when creating the credential (`effectiveOrigins` or `effectiveQueryURL`) to tell the browser which origins the credential is [effective](https://w3c.github.io/webappsec-credential-management/#credential-effective) for. A list of origins may be provided to `effectiveOrigins` if the list of relying parties may be made public and is known ahead of time. If the list of relying parties is dynamic or private, the identity provider may provide an HTTP-endpoint that will respond successfully to a CORS request from the relying party with `Sec-Fetch-Dest: web-identity` if the relying party can use the credential at that time.
 
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    origin_allowlist: ["https://rp1.biz", "https://rp2.info"], // optional
-    dynamic_via_cors: "https://api.login.idp.net/v1/foo", // optional
+    effectiveOrigins: ["https://rp1.biz", "https://rp2.info"], // optional
+    allowlistQueryURL: "https://api.login.idp.net/v1/foo", // optional
   }
 });
 await navigator.credentials.store(cred);
 ```
 
-This allows the IDP to be used without a redirect flow if the user has already logged in. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser if the same link is provided by the IDP and then a browser-initiated CORS request with `Sec-Fetch-Dest: webidentity` is successful. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
+This allows the IDP to be used without a redirect flow if the user has already logged in. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser if the same link is provided by the IDP and then a CORS request with `Sec-Fetch-Dest: webidentity` is successful. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
 
 This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. In those cases where there are no registered identity providers or there are none that are acceptable to a user, the relying party can show fallback content that presents a set of candidate identity providers. Because the choice is not shown to users until obtaining a credential is unsuccessful, the added complexity of the interface might be easier for sites to manage.
 
@@ -180,7 +180,7 @@ for (let r in await IdentityCredential.pendingRequests()) {
   if (IDP_DEFINED_ALLOW_SITE(r.origin)) {
     let cred = await navigator.credentials.create({
       identity : {
-        origin_allowlist: [r.origin],
+        effectiveOrigins: [r.origin],
       }
     });
     navigator.credentials.store(cred);
@@ -198,7 +198,7 @@ We add optional fields to facilitate the user's selection of the credential from
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+    allowlistQueryURL: "https://api.login.idp.net/v1/foo",
     ui_hint: {
       name: "example human readable",
       icon: "https://api.login.idp.net/v1/photos/exampleUser",
@@ -216,7 +216,7 @@ The identity provider can also supply a time at which the account information sh
 ```js
 let cred = await navigator.credentials.create({
 	identity : {
-    dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+    allowlistQueryURL: "https://api.login.idp.net/v1/foo",
     ui_hint: {
       name: "example human readable",
       icon: "https://api.login.idp.net/v1/photos/exampleUser",
@@ -254,7 +254,7 @@ There, the user may do some auth flow and on completion, the identity provider c
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+    allowlistQueryURL: "https://api.login.idp.net/v1/foo",
     ui_hint: {
       name: "example human readable",
       icon: "https://api.login.idp.net/v1/photos/exampleUser",
@@ -290,7 +290,7 @@ As a prerequisite to this scenario, when the user logged into its identity provi
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    dynamic_via_cors: "https://api.login.idp.net/v1/foo", 
+    allowlistQueryURL: "https://api.login.idp.net/v1/foo", 
   }
 });
 await navigator.credentials.store(cred);
@@ -304,7 +304,7 @@ let credential = await navigator.credentials.get({
     'providers' : [
       {
         login_url : "https://login.idp.net/login.html",
-        dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+        allowlistQueryURL: "https://api.login.idp.net/v1/foo",
       },
     ]
   }
@@ -326,7 +326,7 @@ let credential = await navigator.credentials.get({
   identity : {
     providers : [
       {
-        dynamic_via_cors: "https://api.login.idp.net/v1/foo",
+        allowlistQueryURL: "https://api.login.idp.net/v1/foo",
         origin: "https://login.idp.net",
       },
       // ... many allowed ...	
