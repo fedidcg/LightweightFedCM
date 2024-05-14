@@ -54,7 +54,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 
 The goal of this project is to provide a purpose-built API for enabling secure and user-mediated access to cross-site top-level unpartitioned cookies. 
 This is accomplished with integration with the [Credential Management API](https://w3c.github.io/webappsec-credential-management/) to enable easy integration with alternative authentication mechanisms.
-A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec and after appropriate user mediation and identity provider opt-in an object is returned that gives the power to obtain unpartitioned cookies for the chosen identity provider. 
+A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec the browser ensures there is appropriate user mediation and identity provider opt-inand hands off a token. With those assurances, the browser may also decide there is no additional privacy loss associated with access to unpartitioned state, and choose to automatically grant access to Storage Access requests.
 
 ## Goals
 
@@ -146,7 +146,7 @@ let credential = await navigator.credentials.get({
   identity: {providers: {origin: "https://login.idp.net"}}});
 ```
 
-To use cross site cookies, if the credential has been gotten by the RP in the past, then we can delegate to the Storage Access API to use this as a trust signal to prevent a permission dialog.
+To use cross site cookies, if the credential can be silently accessed by the RP, then a browser may decide there is no additional privacy loss associated with access to unpartitioned state and choose to automatically grant access to Storage Access requests, as [proposed already for FedCM](https://github.com/explainers-by-googlers/storage-access-for-fedcm).
 
 ```js
 // Inside of an idp.net iframe
