@@ -221,7 +221,7 @@ let cred = await navigator.credentials.create({
     ui_hint: {
       name: "example human readable",
       icon: "https://api.login.idp.net/v1/photos/exampleUser",
-      expires: "2025-01-01", // RFC 3339 date-time that is the last time the name and iconURL can be used. After this they are "empty"
+      expireAfter: 30*24*60*60*1000, // ms after this call that is the last time the name and iconURL can be used. After this they are "empty"
     }
   }
 });
