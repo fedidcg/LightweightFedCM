@@ -154,7 +154,7 @@ await document.requestStorageAccess();
 
 ## Identity Provider API, Creating a Credential
 
-The identity provider needs to specify at least one of two arguments when creating the credential (`effectiveOrigins` or `effectiveQueryURL`) to tell the browser which origins the credential is [effective](https://w3c.github.io/webappsec-credential-management/#credential-effective) for. A list of origins may be provided to `effectiveOrigins` if the list of relying parties may be made public and is known ahead of time. If the list of relying parties is dynamic or private, the identity provider may provide an HTTP-endpoint that will respond successfully to a CORS request from the relying party with `Sec-Fetch-Dest: web-identity` if the relying party can use the credential at that time.
+The identity provider needs to specify at least one of two arguments when creating the credential (`effectiveOrigins` or `effectiveQueryURL`) to tell the browser which origins the credential is [effective](https://w3c.github.io/webappsec-credential-management/#credential-effective) for. A list of origins may be provided to `effectiveOrigins` if the list of relying parties may be made public and is known ahead of time. If the list of relying parties is dynamic or private, the identity provider may provide an HTTP-endpoint with `effectiveQueryURL` that will respond successfully to a CORS request from the relying party with `Sec-Fetch-Dest: web-identity` if the relying party can use the credential at that time.
 
 ```js
 let cred = await navigator.credentials.create({
