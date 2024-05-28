@@ -55,6 +55,83 @@ The goal of this project is to provide a purpose-built API for enabling secure a
 This is accomplished with integration with the [Credential Management API](https://w3c.github.io/webappsec-credential-management/) to enable easy integration with alternative authentication mechanisms.
 A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec the browser ensures there is appropriate user mediation and identity provider opt-inand hands off a token. With those assurances, the browser may also decide there is no additional privacy loss associated with access to unpartitioned state, and choose to automatically grant access to Storage Access requests.
 
+## TL;DR
+
+Do you want to share data across origins for identity purposes?
+This API gives you a way to do that.
+You can share a data string or use third party cookies via the storage access API without a prompt.
+All you have to do is store some data from the identity provider and get it from the relying party with a browser-mediated prompt.
+
+Put this code in your identity provider's page, to be run when the user is logged in, replacing the list of RP origins with your own and any data you want to share:
+
+```js
+navigator.credentials.store({
+    identity: {
+      id: "preloaded",
+      effectiveQueryURL: ["https://www.known-rp.com"],
+      token: dataToBeSharedWithRPs,
+    }
+  });
+```
+
+Have the relying parties place this HTML in their page to get a login button, replacing your login URL:
+
+```html
+<button id="cscac" hidden>Login via IDP.com</button>
+<script>
+  let button = document.getElementById("cscac");
+  async function do() {
+    let identityInit = {
+      providers: [{
+	      loginURL: "https://auth.idp.com/login"
+      }]
+    };
+    let credential = await navigator.credentials.get({
+      identity: identityInit,
+      mediation: "silent",
+    });
+    if (!credential) {
+      button.onclick = () => {
+        credential = await navigator.credentials.get({
+          identity: identityInit,
+        });
+        console.log("logged in with", credential.origin, "providing token", credential.token);
+      };
+      button.hidden = false;    
+    }	
+  }();
+</script>
+```
+
+
+If you don't want to declare your list of relying parties in advance, you can provide a HTTP endpoint that replies with success only to Origin headers that correspond to your relying parties.
+You may have such an endpoint already!
+This requires two changes to the code above.
+
+First, you provide the endpoint instead of the list of origins on the IDP site:
+
+```js
+navigator.credentials.store({
+    identity: {
+      id: "preloaded",
+      effectiveQueryURL: "https://auth.idp.com/api/v1/anyCORS", // updated this line
+      token: dataToBeSharedWithRP,
+    }
+  });
+```
+
+Second, provide that same URI to the relying parties to be used in the `identityInit` object:
+
+```js
+let identityInit = {
+      providers: [{
+        effectiveQueryURL: "https://auth.idp.com/api/v1/anyCORS", // added this line
+	      loginURL: "https://auth.idp.com/login",
+      }]
+    };
+```
+
+
 ## Goals
 
 The following use cases are all motivating to this work and it is our goal to provide an easy-to-integrate solution for them that can be integrated into the Credential Manager as a unified browser-mediated login mechanism.
@@ -137,7 +214,7 @@ As a prerequisite to this scenario, when the user logged into its identity provi
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo", 
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
   }
 });
 await navigator.credentials.store(cred);
