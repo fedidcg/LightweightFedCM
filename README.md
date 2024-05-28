@@ -85,15 +85,15 @@ let credential = await navigator.credentials.get({
     providers : [
       {
         origin: "https://login.idp.net",
-        login_url: "https://bounce.example.com/?u=https://login.idp.net/login.html",
-        login_target: "redirect",
+        loginURL: "https://bounce.example.com/?u=https://login.idp.net/login.html",
+        loginTarget: "redirect",
       },
     ]
   }
 });
 ```
 
-This example shows the use perfect for a "Log in with Foo" button (use case #1, and use case #2), where one identity provider is presented, and if the user has not already logged in, they may be redirected to that provider's login page. This redirect behavior is only permitted when there is only one provider in the list. A provider with `login_url` field indicates that this is the expected mode. If `login_url` is present, but `origin` is not, its value can be inferred as the origin of the link.
+This example shows the use perfect for a "Log in with Foo" button (use case #1, and use case #2), where one identity provider is presented, and if the user has not already logged in, they may be redirected to that provider's login page. This redirect behavior is only permitted when there is only one provider in the list. A provider with `loginURL` field indicates that this is the expected mode. If `loginURL` is present, but `origin` is not, its value can be inferred as the origin of the link.
 
 Another use example, provided below, shows how to request a credential from one of many IDPs the user may have already linked to this page (use case #3).
 
@@ -104,7 +104,7 @@ let credential = await navigator.credentials.get({
       {
         origin: "https://login.idp.net",
       },
-      // ... many allowed ...	
+      // ... many allowed ...
       {
         origin: "https://auth.example.biz",
       },
@@ -115,12 +115,12 @@ let credential = await navigator.credentials.get({
 
 ### FedCM Integration
 
-There are two main points that need to be integrated with FedCM. First is the provider list. The approach we take is to permit only either regular FedCM providers or a CrossSiteCookieAccessCredential provider with the `login_url` member. Second is the interaction of this proposal's login with "button mode" FedCM. We allow them to coexist by saying that a FedCM request with `mode: 'button'` implies a `login_target: "popup"`. This is for developer convenience.
+There are two main points that need to be integrated with FedCM. First is the provider list. The approach we take is to permit only either regular FedCM providers or a CrossSiteCookieAccessCredential provider with the `loginURL` member. Second is the interaction of this proposal's login with "button mode" FedCM. We allow them to coexist by saying that a FedCM request with `mode: 'button'` implies a `loginTarget: "popup"`. This is for developer convenience.
 
 ```js
 navigator.credentials.get({
   identity: {
-    mode: "button", // login_target: "redirect" would cause an error now.
+    mode: "button", // loginTarget: "redirect" would cause an error now.
     providers : [
       {
         configURL : "https://example.com/FEDCM.json",
@@ -129,7 +129,7 @@ navigator.credentials.get({
         origin : "https://login.idp.net", // Actually fine!
       },
       {
-        login_url : "https://auth.example.biz/login" // Invalid combination!
+        loginURL : "https://auth.example.biz/login" // Invalid combination!
       },
     ]
   }
@@ -160,7 +160,7 @@ The identity provider needs to specify at least one of two arguments when creati
 let cred = await navigator.credentials.create({
   identity : {
     effectiveOrigins: ["https://rp1.biz", "https://rp2.info"], // optional
-    allowlistQueryURL: "https://api.login.idp.net/v1/foo", // optional
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo", // optional
   }
 });
 await navigator.credentials.store(cred);
@@ -172,7 +172,7 @@ This reduces the need for NASCAR pages. Since we allow identity providers to dec
 
 ## Understanding which relying parties to store credentials for
 
-If the user wants to link an IDP that did not already store a valid credential for that origin, the user will find themselves navigated to that `login_url`. In this case, the IDP will want to evaluate the origin of the relying party and then construct and store a credential for that relying party if it so chooses.
+If the user wants to link an IDP that did not already store a valid credential for that origin, the user will find themselves navigated to that `loginURL`. In this case, the IDP will want to evaluate the origin of the relying party and then construct and store a credential for that relying party if it so chooses.
 
 ```js
 for (let r in await IdentityCredential.pendingRequests()) {
@@ -197,10 +197,10 @@ We add optional fields to facilitate the user's selection of the credential from
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    allowlistQueryURL: "https://api.login.idp.net/v1/foo",
-    ui_hint: {
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
+    uiHint: {
       name: "example human readable",
-      icon: "https://api.login.idp.net/v1/photos/exampleUser",
+      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
     }
   }
 });
@@ -215,11 +215,11 @@ The identity provider can also supply a time at which the account information sh
 ```js
 let cred = await navigator.credentials.create({
 	identity : {
-    allowlistQueryURL: "https://api.login.idp.net/v1/foo",
-    ui_hint: {
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
+    uiHint: {
       name: "example human readable",
-      icon: "https://api.login.idp.net/v1/photos/exampleUser",
-      expireAfter: 30*24*60*60*1000, // ms after this call that is the last time the name and iconURL can be used. After this they are "empty"
+      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
+      expiresAfter: 30*24*60*60*1000, // ms after this call that is the last time the name and iconURL can be used. After this they are "empty"
     }
   }
 });
@@ -240,7 +240,7 @@ let credential = await navigator.credentials.get({
   identity : {
     providers : [
       {
-        login_url : "https://login.idp.net/login.html",
+        loginURL : "https://login.idp.net/login.html",
       },
     ]
   }
@@ -253,10 +253,10 @@ There, the user may do some auth flow and on completion, the identity provider c
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    allowlistQueryURL: "https://api.login.idp.net/v1/foo",
-    ui_hint: {
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
+    uiHint: {
       name: "example human readable",
-      icon: "https://api.login.idp.net/v1/photos/exampleUser",
+      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
     }
   }
 });
@@ -289,7 +289,7 @@ As a prerequisite to this scenario, when the user logged into its identity provi
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    allowlistQueryURL: "https://api.login.idp.net/v1/foo", 
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo", 
   }
 });
 await navigator.credentials.store(cred);
@@ -302,8 +302,8 @@ let credential = await navigator.credentials.get({
   'identity' : {
     'providers' : [
       {
-        login_url : "https://login.idp.net/login.html",
-        allowlistQueryURL: "https://api.login.idp.net/v1/foo",
+        loginURL : "https://login.idp.net/login.html",
+        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
       },
     ]
   }
@@ -325,7 +325,7 @@ let credential = await navigator.credentials.get({
   identity : {
     providers : [
       {
-        allowlistQueryURL: "https://api.login.idp.net/v1/foo",
+        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
         origin: "https://login.idp.net",
       },
       // ... many allowed ...	
