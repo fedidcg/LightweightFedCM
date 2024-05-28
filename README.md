@@ -19,16 +19,16 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 - [Introduction](#introduction)
 - [Goals](#goals)
 - [Non-goals](#non-goals)
+- [Key scenarios](#key-scenarios)
+  - [Scenario 1: User intends to link to an identity provider they are not logged into](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
+  - [Scenario 2: User intends to link to an identity provider they are already logged in to](#scenario-2-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
+  - [Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider](#scenario-3-user-intends-to-log-into-a-site-and-may-have-already-linked-an-identity-provider-or-an-unlinked-but-logged-in-identity-provider)
 - [Relying Party API, Getting a Credential](#relying-party-api-getting-a-credential)
   - [FedCM Integration](#fedcm-integration)
 - [Relying Party API, Using a Credential](#relying-party-api-using-a-credential)
 - [Identity Provider API, Creating a Credential](#identity-provider-api-creating-a-credential)
 - [Understanding which relying parties to store credentials for](#understanding-which-relying-parties-to-store-credentials-for)
 - [Identity Provider API, Attaching Account Information to a Credential](#identity-provider-api-attaching-account-information-to-a-credential)
-- [Key scenarios](#key-scenarios)
-  - [Scenario 1: User intends to link to an identity provider they are not logged into](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
-  - [Scenario 2: User intends to link to an identity provider they are already logged in to](#scenario-2-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
-  - [Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider](#scenario-3-user-intends-to-log-into-a-site-and-may-have-already-linked-an-identity-provider-or-an-unlinked-but-logged-in-identity-provider)
 - [Detailed design discussion](#detailed-design-discussion)
   - [A light touch from the browser](#a-light-touch-from-the-browser)
   - [Using the Credential Manager](#using-the-credential-manager)
@@ -73,6 +73,119 @@ The following use cases are all motivating to this work and it is our goal to pr
 - Custom identity provider infrastructure
 - Generic prompts to "allow foo.com to track you"
 - Design of an identity protocol
+
+
+## Key scenarios
+
+These APIs together enable login and linking scenarios that I have put into three  categories.
+
+### Scenario 1: User intends to link to an identity provider they are not logged into
+
+In this case, our user has not used this identity provider (idp.net) on this site (example.com). They first interact with some UI in the page that is clearly associated with the identity provider and the following is called.
+
+```js
+let credential = await navigator.credentials.get({
+  identity : {
+    providers : [
+      {
+        loginURL : "https://login.idp.net/login.html",
+      },
+    ]
+  }
+});
+```
+
+Browser UI is shown to the user that lets them pick to link their account to the identity provider. On selection, the browser redirects the navigatable to `https://login.idp.net/login.html`.
+There, the user may do some auth flow and on completion, the identity provider calls the following:
+
+```js
+let cred = await navigator.credentials.create({
+  identity : {
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
+    uiHint: {
+      name: "example human readable",
+      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
+    }
+  }
+});
+navigator.credentials.store(cred);
+location.href = RETURN_TO_PAGE; // example.com page
+```
+
+This stores a new Credential in the Credential Store and enables a silent access for the site and navigates the user back.
+Upon return to the site to be logged into, the site runs the following:
+
+```js
+let credential = await navigator.credentials.get({
+  identity : {
+    providers : [
+      {
+        origin: "https://login.idp.net",
+      },
+  }
+});
+````
+
+or embeds an IdP iframe or other resources that want to access unpartitioned cross-site storage.
+
+This can be run on every page load as it is guaranteed to provide no browser UI and provides the cross-site unpartitioned storage access desired.
+
+### Scenario 2: User intends to link to an identity provider they are already logged in to
+
+As a prerequisite to this scenario, when the user logged into its identity provider, it called the following:
+
+```js
+let cred = await navigator.credentials.create({
+  identity : {
+    effectiveQueryURL: "https://api.login.idp.net/v1/foo", 
+  }
+});
+await navigator.credentials.store(cred);
+```
+
+As before, in this case, our user has not used this identity provider (idp.net) on this site (example.com). They first interact with some UI in the page that is clearly associated with the identity provider. The same code is called, and the same browser UI is shown. 
+
+```js
+let credential = await navigator.credentials.get({
+  'identity' : {
+    'providers' : [
+      {
+        loginURL : "https://login.idp.net/login.html",
+        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
+      },
+    ]
+  }
+});
+```
+
+However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned.
+
+### Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider
+
+In this scenario the user has made some indication to the site that they want to log in. 
+The specifics of that interaction dictate what Credential types are appropriate. For sake of discussion, let's say the credentials defined here and a PasswordCredential would be good.
+The page then calls the following: 
+
+
+```js
+let credential = await navigator.credentials.get({
+  password: true,
+  identity : {
+    providers : [
+      {
+        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
+        origin: "https://login.idp.net",
+      },
+      // ... many allowed ...	
+      {
+        origin: "https://auth.example.biz",
+      },
+    ]
+  }
+});
+```
+
+Then the user is given any identity provider from the list that they have already linked, any identity providers they have visited and stored themselves in the credential store, and password manager entries as options in the browser UI. Whichever is selected is returned. Note also that depending on the credential manager state, request details, and if only one credential is collected from the store, the UI may be elided. See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements).
 
 ## Relying Party API, Getting a Credential
 
@@ -225,119 +338,6 @@ let cred = await navigator.credentials.create({
 });
 await navigator.credentials.store(cred);
 ```
-
-
-## Key scenarios
-
-These APIs together enable login and linking scenarios that I have put into three  categories.
-
-### Scenario 1: User intends to link to an identity provider they are not logged into
-
-In this case, our user has not used this identity provider (idp.net) on this site (example.com). They first interact with some UI in the page that is clearly associated with the identity provider and the following is called.
-
-```js
-let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
-      {
-        loginURL : "https://login.idp.net/login.html",
-      },
-    ]
-  }
-});
-```
-
-Browser UI is shown to the user that lets them pick to link their account to the identity provider. On selection, the browser redirects the navigatable to `https://login.idp.net/login.html`.
-There, the user may do some auth flow and on completion, the identity provider calls the following:
-
-```js
-let cred = await navigator.credentials.create({
-  identity : {
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-    uiHint: {
-      name: "example human readable",
-      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
-    }
-  }
-});
-navigator.credentials.store(cred);
-location.href = RETURN_TO_PAGE; // example.com page
-```
-
-This stores a new Credential in the Credential Store and enables a silent access for the site and navigates the user back.
-Upon return to the site to be logged into, the site runs the following:
-
-```js
-let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
-      {
-        origin: "https://login.idp.net",
-      },
-  }
-});
-````
-
-or embeds an IdP iframe or other resources that want to access unpartitioned cross-site storage.
-
-This can be run on every page load as it is guaranteed to provide no browser UI and provides the cross-site unpartitioned storage access desired.
-
-### Scenario 2: User intends to link to an identity provider they are already logged in to
-
-As a prerequisite to this scenario, when the user logged into its identity provider, it called the following:
-
-```js
-let cred = await navigator.credentials.create({
-  identity : {
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo", 
-  }
-});
-await navigator.credentials.store(cred);
-```
-
-As before, in this case, our user has not used this identity provider (idp.net) on this site (example.com). They first interact with some UI in the page that is clearly associated with the identity provider. The same code is called, and the same browser UI is shown. 
-
-```js
-let credential = await navigator.credentials.get({
-  'identity' : {
-    'providers' : [
-      {
-        loginURL : "https://login.idp.net/login.html",
-        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-      },
-    ]
-  }
-});
-```
-
-However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned.
-
-### Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider
-
-In this scenario the user has made some indication to the site that they want to log in. 
-The specifics of that interaction dictate what Credential types are appropriate. For sake of discussion, let's say the credentials defined here and a PasswordCredential would be good.
-The page then calls the following: 
-
-
-```js
-let credential = await navigator.credentials.get({
-  password: true,
-  identity : {
-    providers : [
-      {
-        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-        origin: "https://login.idp.net",
-      },
-      // ... many allowed ...	
-      {
-        origin: "https://auth.example.biz",
-      },
-    ]
-  }
-});
-```
-
-Then the user is given any identity provider from the list that they have already linked, any identity providers they have visited and stored themselves in the credential store, and password manager entries as options in the browser UI. Whichever is selected is returned. Note also that depending on the credential manager state, request details, and if only one credential is collected from the store, the UI may be elided. See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements).
 
 ## Detailed design discussion
 
