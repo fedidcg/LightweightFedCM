@@ -17,6 +17,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [TL;DR](#tldr)
 - [Goals](#goals)
 - [Non-goals](#non-goals)
 - [Key scenarios](#key-scenarios)
