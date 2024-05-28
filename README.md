@@ -124,7 +124,7 @@ let credential = await navigator.credentials.get({
       },
   }
 });
-````
+```
 
 or embeds an IdP iframe or other resources that want to access unpartitioned cross-site storage.
 
