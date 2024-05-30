@@ -28,14 +28,12 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
   - [FedCM Integration](#fedcm-integration)
 - [Relying Party API, Using a Credential](#relying-party-api-using-a-credential)
 - [Identity Provider API, Creating a Credential](#identity-provider-api-creating-a-credential)
-- [Understanding which relying parties to store credentials for](#understanding-which-relying-parties-to-store-credentials-for)
 - [Identity Provider API, Attaching Account Information to a Credential](#identity-provider-api-attaching-account-information-to-a-credential)
 - [Detailed design discussion](#detailed-design-discussion)
   - [A light touch from the browser](#a-light-touch-from-the-browser)
   - [Using the Credential Manager](#using-the-credential-manager)
   - [Identity provider opt-in per relying party](#identity-provider-opt-in-per-relying-party)
   - [Scope of the credential's effectiveness and storage access](#scope-of-the-credentials-effectiveness-and-storage-access)
-  - [Scope of the `IdentityCredential.pendingRequests()` and lifetime of those requests](#scope-of-the-identitycredentialpendingrequests-and-lifetime-of-those-requests)
   - [UI Considerations and identity provider origin](#ui-considerations-and-identity-provider-origin)
   - [Multiple identity providers](#multiple-identity-providers)
   - [The NASCAR problem](#the-nascar-problem)
@@ -361,29 +359,9 @@ This allows the IDP to be used without a redirect flow if the user has already l
 
 This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. In those cases where there are no registered identity providers or there are none that are acceptable to a user, the relying party can show fallback content that presents a set of candidate identity providers. Because the choice is not shown to users until obtaining a credential is unsuccessful, the added complexity of the interface might be easier for sites to manage.
 
-## Understanding which relying parties to store credentials for
-
-If the user wants to link an IDP that did not already store a valid credential for that origin, the user will find themselves navigated to that `loginURL`. In this case, the IDP will want to evaluate the origin of the relying party and then construct and store a credential for that relying party if it so chooses.
-
-```js
-for (let r in await IdentityCredential.pendingRequests()) {
-  if (IDP_DEFINED_ALLOW_SITE(r.origin)) {
-    let cred = await navigator.credentials.create({
-      identity : {
-        effectiveOrigins: [r.origin],
-      }
-    });
-    navigator.credentials.store(cred);
-  }
-}
-```
-
-Here the identity provider chooses which sites may be valid relying parties dynamically from its own page, via the function `IDP_DEFINED_ALLOW_SITE`, after enumerating all pending requests that exist for their use as an identity provider. Those pending requests should have a short lifetime, probably no longer than an hour.
-
-
 ## Identity Provider API, Attaching Account Information to a Credential
 
-We add optional fields to facilitate the user's selection of the credential from the credential chooser. These match the fields in the `CredentialDataMixin` from the `Credential Management Level 1` spec. 
+We add optional fields to facilitate the user's selection of the credential from the credential chooser. These match the fields in the `CredentialDataMixin` from the `Credential Management Level 1` spec.
 
 ```js
 let cred = await navigator.credentials.create({
@@ -436,10 +414,6 @@ The answer lies in a constraint that the identity provider needs to pick and cho
 ### Scope of the credential's effectiveness and storage access
 
 The credential provides cookie access to just the identity provider's origin. The security benefits of this are discussed elsewhere. We relax constraints on the relying party to site-scoping because login pages can reasonably be on different subdomains than the rest of the site. Because of the natural site-scoping of cookies, this has no privacy impact.
-
-### Scope of the `IdentityCredential.pendingRequests()` and lifetime of those requests
-
-The pending requests of the `pendingRequests` interface is partitioned by top-level navigatable to preserve contextual integrity of the login flow. This means that popup flows are explicitly out of scope. We also dictate that the lifetime of a request should be at most an hour to prevent persistent tracking if a user backs out of an account linkage. Notably the pre-allowed identity providers are not partitioned by navigatable and are instead global.
 
 ### UI Considerations and identity provider origin
 
