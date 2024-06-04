@@ -21,9 +21,9 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 - [Goals](#goals)
 - [Non-goals](#non-goals)
 - [Key scenarios](#key-scenarios)
-  - [Scenario 1: User intends to link to an identity provider they are already logged in to](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
+  - [Scenario 1: User intends to link to an identity provider they are not logged into](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
   - [Scenario 2: User logs in with one of many identity providers, or other types of credential](#scenario-2-user-logs-in-with-one-of-many-identity-providers-or-other-types-of-credential)
-  - [Scenario 3: User intends to link to an identity provider they are not logged into](#scenario-3-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
+  - [Scenario 3: User intends to link to an identity provider they are already logged in to](#scenario-3-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
 - [Relying Party API, Getting a Credential](#relying-party-api-getting-a-credential)
   - [FedCM Integration](#fedcm-integration)
 - [Relying Party API, Using a Credential](#relying-party-api-using-a-credential)
@@ -157,24 +157,58 @@ The following use cases are all motivating to this work and it is our goal to pr
 These APIs together enable login and linking scenarios that I have put into a few categories.
 For all of these, imagine that an identity provider would store a credential on the user's browser when they log in.
 
-### Scenario 1: User intends to link to an identity provider they are already logged in to
 
-In this case, our user has not used this identity provider (`login.idp.net`) on this site (`example.com`). They first interact with some UI in the page that is (hopefully) clearly associated with the identity provider. This calls the following code:
+### Scenario 1: User intends to link to an identity provider they are not logged into
+
+In this case, our user is not even logged into this this identity provider (`idp.net`), just having navigated to this site (`example.com`).
+They first interact with some UI in the page that is clearly associated with the identity provider and the following is called.
 
 ```js
 let credential = await navigator.credentials.get({
-  'identity' : {
-    'providers' : [
+  identity : {
+    providers : [
       {
-        origin : "https://login.idp.net",
+        loginURL : "https://login.idp.net/login.html",
+        origin: "https://login.idp.net", // may be omitted, inferred from loginURL
       },
     ]
   }
 });
 ```
-The browser looks into the credential store and sees that there is a credential this is effective for `example.com` from `login.idp.net`.
-The browser give the user a "credential chooser" UI that allows them to share their account at `login.idp.net` with `example.com`.
-Once the user consents, a link is made and the Promise is resolved with a Credential.
+
+The browser sees there is no credential in the credential store that would work for `example.com`.
+So it falls back and opens the `loginURL` in a tab of the RP's choosing.
+Since it is not specified, we assume the current tab.
+There, the user goes through some authentication and/or authorization flow entirely of the identity provider's choosing, after which the identity provider stores a credential with some code like this:
+
+```js
+let cred = await navigator.credentials.create({
+  identity : {
+    effectiveOrigins: ["https://example.com"],
+    token: "data to be given to example.com",
+  }
+});
+await navigator.credentials.store(cred);
+```
+
+Once this is done, the identity provider navigates the user back to the relying party.
+Upon return to `example.com`, the page may run the following, showing the user UI to link the identities as in Scenario 3.
+
+```js
+let credential = await navigator.credentials.get({
+  identity : {
+    providers : [
+      {
+        origin: "https://login.idp.net",
+      },
+    ]
+  }
+});
+```
+
+We need to bypass the requirement for user interaction here if we had user interaction to force the navigation but redirected the current tab instead of opening a popup.
+
+Note that in the case of a popup, the credential chooser should show once the identity provider stores a credential that is effective for the pending credential request on the relying party, removing the need for the relying party to call `navigator.credentials.get` a second time.
 
 ### Scenario 2: User logs in with one of many identity providers, or other types of credential
 
@@ -207,46 +241,25 @@ Note also that depending on the credential manager state, request details, and i
 Or if the browser simply wants to poll for the presence of such a credential without any UI they can do that as well.
 See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements) for more details.
 
-### Scenario 3: User intends to link to an identity provider they are not logged into
+### Scenario 3: User intends to link to an identity provider they are already logged in to
 
-In this case, our user is not even logged into this this identity provider (`idp.net`), just having navigated to this site (`example.com`).
-They first interact with some UI in the page that is clearly associated with the identity provider and the following is called.
+In this case, our user has not used this identity provider (`login.idp.net`) on this site (`example.com`). They first interact with some UI in the page that is (hopefully) clearly associated with the identity provider. This calls the following code:
 
 ```js
 let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
+  'identity' : {
+    'providers' : [
       {
-        loginURL : "https://login.idp.net/login.html",
-        origin: "https://login.idp.net", // may be omitted, inferred from loginURL
+        origin : "https://login.idp.net",
       },
     ]
   }
 });
 ```
+The browser looks into the credential store and sees that there is a credential this is effective for `example.com` from `login.idp.net`.
+The browser give the user a "credential chooser" UI that allows them to share their account at `login.idp.net` with `example.com`.
+Once the user consents, a link is made and the Promise is resolved with a Credential.
 
-The browser sees there is no credential in the credential store that would work for `example.com`.
-So it falls back and opens the `loginURL` in a tab of the RP's choosing.
-Since it is not specified, we assume the current tab.
-There, the user goes through some authentication and/or authorization flow entirely of the identity provider's choosing, after which the identity provider stores a credential and navigates the user back to the relying party.
-
-Upon return to `example.com`, the page may run the following, showing the user UI to link the identities as in Scenario 1.
-
-```js
-let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
-      {
-        origin: "https://login.idp.net",
-      },
-    ]
-  }
-});
-```
-
-We need to bypass the requirement for user interaction here if we had user interaction to force the navigation but redirected the current tab instead of opening a popup.
-
-Note that in the case of a popup, the credential chooser should show once the identity provider stores a credential that is effective for the pending credential request on the relying party.
 
 ## Relying Party API, Getting a Credential
 
