@@ -22,7 +22,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 - [Non-goals](#non-goals)
 - [Key scenarios](#key-scenarios)
   - [Scenario 1: User intends to link to an identity provider they are not logged into](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
-  - [Scenario 2: User logs in with one of many identity providers, or other types of credential](#scenario-2-user-logs-in-with-one-of-many-identity-providers-or-other-types-of-credential)
+  - [Scenario 2: User logs in with one of many identity providers, or other types of credentials](#scenario-2-user-logs-in-with-one-of-many-identity-providers-or-other-types-of-credentials)
   - [Scenario 3: User intends to link to an identity provider they are already logged in to](#scenario-3-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
 - [Relying Party API, Getting a Credential](#relying-party-api-getting-a-credential)
   - [FedCM Integration](#fedcm-integration)
@@ -177,8 +177,8 @@ let credential = await navigator.credentials.get({
 ```
 
 The browser sees there is no credential in the credential store that would work for `example.com`.
-So it falls back and opens the `loginURL` in a tab of the RP's choosing.
-Since it is not specified, we assume the current tab.
+So it falls back and opens the `loginURL`. The RP can choose whether to open this URL in a pop-up or via a redirect.
+The API defaults to redirecting the user to the `loginURL`.
 There, the user goes through some authentication and/or authorization flow entirely of the identity provider's choosing, after which the identity provider stores a credential with some code like this:
 
 ```js
@@ -206,11 +206,9 @@ let credential = await navigator.credentials.get({
 });
 ```
 
-We need to bypass the requirement for user interaction here if we had user interaction to force the navigation but redirected the current tab instead of opening a popup.
-
 Note that in the case of a popup, the credential chooser should show once the identity provider stores a credential that is effective for the pending credential request on the relying party, removing the need for the relying party to call `navigator.credentials.get` a second time.
 
-### Scenario 2: User logs in with one of many identity providers, or other types of credential
+### Scenario 2: User logs in with one of many identity providers, or other types of credentials
 
 In this scenario the user has made some indication to the site that they want to log in.
 The specifics of that interaction dictate what Credential types are appropriate.
