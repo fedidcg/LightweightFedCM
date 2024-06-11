@@ -398,6 +398,16 @@ let cred = await navigator.credentials.create({
 await navigator.credentials.store(cred);
 ```
 
+## Open Questions
+
+### Requiring loginURL in a site level well-known resource
+
+One solution to preventing navigational tracking on the `loginURL` is to make the url be constant across the IDP's site.
+This restricts white label SSO use cases and is a challenge for smaller deployments.
+Instead we currently accept the navigational tracking since there is no clear path to removing `window.open` from the platform.
+Whether or not this is acceptable will depend on further analysis and discussion.
+
+
 ## Detailed design discussion
 
 ### A light touch from the browser
@@ -449,12 +459,6 @@ The identity provider's use of `IdentityCredential.requests` to allow future req
 Allowing a navigation to the identity provider before any dialog does incur the potential for navigational tracking.
 However, this is no worse than permitting calls to `window.open`, especially since our use requires user activation.
 This also makes presence in the credential chooser entirely opt-in and makes it trivial to obtain an icon to show in place of UI hints, making a well-known resource unneccessary and cleaning up the architecture of the design.
-
-### Requiring loginURL in a site level well-known resource
-
-One solution to preventing navigational tracking on the `loginURL` is to make the url be constant across the IDP's site.
-This restricts white label SSO use cases and is a challenge for smaller deployments.
-Instead we accept the navigational tracking since there is no clear path to removing `window.open` from the platform.
 
 ### Names
 
