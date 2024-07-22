@@ -22,8 +22,8 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 - [Non-goals](#non-goals)
 - [Key scenarios](#key-scenarios)
   - [Scenario 1: User intends to link to an identity provider they are not logged into](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
-  - [Scenario 2: User intends to link to an identity provider they are already logged in to](#scenario-2-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
-  - [Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider](#scenario-3-user-intends-to-log-into-a-site-and-may-have-already-linked-an-identity-provider-or-an-unlinked-but-logged-in-identity-provider)
+  - [Scenario 2: User logs in with one of many identity providers, or other types of credentials](#scenario-2-user-logs-in-with-one-of-many-identity-providers-or-other-types-of-credentials)
+  - [Scenario 3: User intends to link to an identity provider they are already logged in to](#scenario-3-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
 - [Relying Party API, Getting a Credential](#relying-party-api-getting-a-credential)
   - [FedCM Integration](#fedcm-integration)
 - [Relying Party API, Using a Credential](#relying-party-api-using-a-credential)
@@ -38,10 +38,11 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
   - [Multiple identity providers](#multiple-identity-providers)
   - [The NASCAR problem](#the-nascar-problem)
 - [Considered alternatives](#considered-alternatives)
-  - [Lightweight Credentials that contain cross-site Identities](#lightweight-credentials-that-contain-cross-site-identities)
   - [Independent Credential type](#independent-credential-type)
   - [requestStorageAccessFor, top-level-storage-access, Forward Declared Storage Access, the old Storage Access API](#requeststorageaccessfor-top-level-storage-access-forward-declared-storage-access-the-old-storage-access-api)
   - [Login Status API](#login-status-api)
+  - [Browser dialog before navigation to the `loginURL`](#browser-dialog-before-navigation-to-the-loginurl)
+  - [Requiring loginURL in a site level well-known resource](#requiring-loginurl-in-a-site-level-well-known-resource)
   - [Names](#names)
 - [Stakeholder Feedback / Opposition](#stakeholder-feedback--opposition)
 - [Acknowledgements](#acknowledgements)
@@ -66,7 +67,7 @@ Put this code in your identity provider's page, to be run when the user is logge
 ```js
 navigator.credentials.store({
     identity: {
-      id: "preloaded",
+      id: "foo",
       effectiveQueryURL: ["https://www.known-rp.com"],
       token: dataToBeSharedWithRPs,
     }
@@ -153,11 +154,14 @@ The following use cases are all motivating to this work and it is our goal to pr
 
 ## Key scenarios
 
-These APIs together enable login and linking scenarios that I have put into three  categories.
+These APIs together enable login and linking scenarios that I have put into a few categories.
+For all of these, imagine that an identity provider would store a credential on the user's browser when they log in.
+
 
 ### Scenario 1: User intends to link to an identity provider they are not logged into
 
-In this case, our user has not used this identity provider (idp.net) on this site (example.com). They first interact with some UI in the page that is clearly associated with the identity provider and the following is called.
+In this case, our user is not even logged into this this identity provider (`idp.net`), just having navigated to this site (`example.com`).
+They first interact with some UI in the page that is clearly associated with the identity provider and the following is called.
 
 ```js
 let credential = await navigator.credentials.get({
@@ -165,31 +169,30 @@ let credential = await navigator.credentials.get({
     providers : [
       {
         loginURL : "https://login.idp.net/login.html",
+        origin: "https://login.idp.net", // may be omitted, inferred from loginURL
       },
     ]
   }
 });
 ```
 
-Browser UI is shown to the user that lets them pick to link their account to the identity provider. On selection, the browser redirects the navigatable to `https://login.idp.net/login.html`.
-There, the user may do some auth flow and on completion, the identity provider calls the following:
+The browser sees there is no credential in the credential store that would work for `example.com`.
+So it falls back and opens the `loginURL`. The RP can choose whether to open this URL in a pop-up or via a redirect.
+The API defaults to redirecting the user to the `loginURL`.
+There, the user goes through some authentication and/or authorization flow entirely of the identity provider's choosing, after which the identity provider stores a credential with some code like this:
 
 ```js
 let cred = await navigator.credentials.create({
   identity : {
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-    uiHint: {
-      name: "example human readable",
-      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
-    }
+    effectiveOrigins: ["https://example.com"],
+    token: "data to be given to example.com",
   }
 });
-navigator.credentials.store(cred);
-location.href = RETURN_TO_PAGE; // example.com page
+await navigator.credentials.store(cred);
 ```
 
-This stores a new Credential in the Credential Store and enables a silent access for the site and navigates the user back.
-Upon return to the site to be logged into, the site runs the following:
+Once this is done, the identity provider navigates the user back to the relying party.
+Upon return to `example.com`, the page may run the following, showing the user UI to link the identities as in Scenario 3.
 
 ```js
 let credential = await navigator.credentials.get({
@@ -198,50 +201,19 @@ let credential = await navigator.credentials.get({
       {
         origin: "https://login.idp.net",
       },
-  }
-});
-```
-
-or embeds an IdP iframe or other resources that want to access unpartitioned cross-site storage.
-
-This can be run on every page load as it is guaranteed to provide no browser UI and provides the cross-site unpartitioned storage access desired.
-
-### Scenario 2: User intends to link to an identity provider they are already logged in to
-
-As a prerequisite to this scenario, when the user logged into its identity provider, it called the following:
-
-```js
-let cred = await navigator.credentials.create({
-  identity : {
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-  }
-});
-await navigator.credentials.store(cred);
-```
-
-As before, in this case, our user has not used this identity provider (idp.net) on this site (example.com). They first interact with some UI in the page that is clearly associated with the identity provider. The same code is called, and the same browser UI is shown. 
-
-```js
-let credential = await navigator.credentials.get({
-  'identity' : {
-    'providers' : [
-      {
-        loginURL : "https://login.idp.net/login.html",
-        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-      },
     ]
   }
 });
 ```
 
-However, upon selecting to link with idp.net, the browser notices that it has a way to test if this is a valid origin. Since there is no allowlist, it sends a GET request to `https://api.login.idp.net/v1/foo` with CORS header `Origin: https://www.example.com`, and observes the response. If it is a successful response, the credential is returned.
+Note that in the case of a popup, the credential chooser should show once the identity provider stores a credential that is effective for the pending credential request on the relying party, removing the need for the relying party to call `navigator.credentials.get` a second time.
 
-### Scenario 3: User intends to log into a site, and may have already linked an identity provider or an unlinked-but-logged-in identity provider
+### Scenario 2: User logs in with one of many identity providers, or other types of credentials
 
-In this scenario the user has made some indication to the site that they want to log in. 
-The specifics of that interaction dictate what Credential types are appropriate. For sake of discussion, let's say the credentials defined here and a PasswordCredential would be good.
-The page then calls the following: 
-
+In this scenario the user has made some indication to the site that they want to log in.
+The specifics of that interaction dictate what Credential types are appropriate.
+For sake of discussion, let's say the identity providers defined here and a PasswordCredential would be good.
+The page then calls the following:
 
 ```js
 let credential = await navigator.credentials.get({
@@ -249,10 +221,9 @@ let credential = await navigator.credentials.get({
   identity : {
     providers : [
       {
-        effectiveQueryURL: "https://api.login.idp.net/v1/foo",
         origin: "https://login.idp.net",
       },
-      // ... many allowed ...	
+      // ... many allowed ...
       {
         origin: "https://auth.example.biz",
       },
@@ -261,7 +232,32 @@ let credential = await navigator.credentials.get({
 });
 ```
 
-Then the user is given any identity provider from the list that they have already linked, any identity providers they have visited and stored themselves in the credential store, and password manager entries as options in the browser UI. Whichever is selected is returned. Note also that depending on the credential manager state, request details, and if only one credential is collected from the store, the UI may be elided. See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements).
+Then the user is presented any account information from identity providers they have visited and stored themselves in the credential store, and password manager entries as options in the browser UI.
+Whichever is selected is returned.
+
+Note also that depending on the credential manager state, request details, and if only one credential is collected from the store, the UI may be elided.
+Or if the browser simply wants to poll for the presence of such a credential without any UI they can do that as well.
+See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements) for more details.
+
+### Scenario 3: User intends to link to an identity provider they are already logged in to
+
+In this case, our user has not used this identity provider (`login.idp.net`) on this site (`example.com`). They first interact with some UI in the page that is (hopefully) clearly associated with the identity provider. This calls the following code:
+
+```js
+let credential = await navigator.credentials.get({
+  'identity' : {
+    'providers' : [
+      {
+        origin : "https://login.idp.net",
+      },
+    ]
+  }
+});
+```
+The browser looks into the credential store and sees that there is a credential this is effective for `example.com` from `login.idp.net`.
+The browser give the user a "credential chooser" UI that allows them to share their account at `login.idp.net` with `example.com`.
+Once the user consents, a link is made and the Promise is resolved with a Credential.
+
 
 ## Relying Party API, Getting a Credential
 
@@ -274,7 +270,7 @@ let credential = await navigator.credentials.get({
     providers : [
       {
         origin: "https://login.idp.net",
-        loginURL: "https://bounce.example.com/?u=https://login.idp.net/login.html",
+        loginURL: "https://bounce.example.com/?u=https://login.idp.net/login.html?r=https://rp.net/",
         loginTarget: "redirect",
       },
     ]
@@ -282,9 +278,9 @@ let credential = await navigator.credentials.get({
 });
 ```
 
-This example shows the use perfect for a "Log in with Foo" button (use case #1, and use case #2), where one identity provider is presented, and if the user has not already logged in, they may be redirected to that provider's login page. This redirect behavior is only permitted when there is only one provider in the list. A provider with `loginURL` field indicates that this is the expected mode. If `loginURL` is present, but `origin` is not, its value can be inferred as the origin of the link.
+This example shows the use perfect for a "Log in with Foo" button, where one identity provider is presented, and if the user has not already logged in, they may be redirected to that provider's login page. This redirect behavior is only permitted when there is only one provider in the list. A provider with `loginURL` field indicates that this is the expected mode. If `loginURL` is present, but `origin` is not, its value can be inferred as the origin of the link.
 
-Another use example, provided below, shows how to request a credential from one of many IDPs the user may have already linked to this page (use case #3).
+Another use example, provided below, shows how to request a credential from one of many IDPs the user may have already linked to this page.
 
 ```js
 let credential = await navigator.credentials.get({
@@ -304,7 +300,7 @@ let credential = await navigator.credentials.get({
 
 ### FedCM Integration
 
-There are two main points that need to be integrated with FedCM. First is the provider list. The approach we take is to permit only either regular FedCM providers or a CrossSiteCookieAccessCredential provider with the `loginURL` member. Second is the interaction of this proposal's login with "button mode" FedCM. We allow them to coexist by saying that a FedCM request with `mode: 'button'` implies a `loginTarget: "popup"`. This is for developer convenience.
+There are two main points that need to be integrated with FedCM. First is the provider list. The approach we take is to restrict each provider entry to either the `loginURL` member or the `configURL` member. Second is the interaction of this proposal's login with "button mode" FedCM. We allow them to coexist by saying that a FedCM request with `mode: 'button'` implies a `loginTarget: "popup"`. This is for developer convenience.
 
 ```js
 navigator.credentials.get({
@@ -318,7 +314,11 @@ navigator.credentials.get({
         origin : "https://login.idp.net", // Actually fine!
       },
       {
-        loginURL : "https://auth.example.biz/login" // Invalid combination!
+        loginURL : "https://auth.example.biz/login" // Invalid combination, can't have loginURL and other providers
+      },
+      {
+        configURL : "https://example.com/FEDCM.json", // This provider entry will never be valid,
+        loginURL : "https://auth.example.biz/login"   // even if it is the only one in the list.
       },
     ]
   }
@@ -327,11 +327,13 @@ navigator.credentials.get({
 
 ## Relying Party API, Using a Credential
 
-The RP can use the credential as an object once it is obtained as it would with FedCM, or as any other Credential. 
+The RP can use the Credential as an object once it is obtained as it would with FedCM, or as any other Credential type.
+This includes accessing the credential's token.
 
 ```js
 let credential = await navigator.credentials.get({
   identity: {providers: {origin: "https://login.idp.net"}}});
+let dataFromTheIDP = credential.token;
 ```
 
 To use cross site cookies, if the credential can be silently accessed by the RP, then a browser may decide there is no additional privacy loss associated with access to unpartitioned state and choose to automatically grant access to Storage Access requests, as [proposed already for FedCM](https://github.com/explainers-by-googlers/storage-access-for-fedcm).
@@ -350,12 +352,13 @@ let cred = await navigator.credentials.create({
   identity : {
     effectiveOrigins: ["https://rp1.biz", "https://rp2.info"], // optional
     effectiveQueryURL: "https://api.login.idp.net/v1/foo", // optional
+    token: "data to be given to any RP the user consents to and this is effective for.",
   }
 });
 await navigator.credentials.store(cred);
 ```
 
-This allows the IDP to be used without a redirect flow if the user has already logged in. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser if the same link is provided by the IDP and then a CORS request with `Sec-Fetch-Dest: webidentity` is successful. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
+This allows the identity provider to be used without a redirect flow if the user has already logged in to that provider. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser if the same link is provided by the IDP and a CORS request with `Sec-Fetch-Dest: webidentity` is successful. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
 
 This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. In those cases where there are no registered identity providers or there are none that are acceptable to a user, the relying party can show fallback content that presents a set of candidate identity providers. Because the choice is not shown to users until obtaining a credential is unsuccessful, the added complexity of the interface might be easier for sites to manage.
 
@@ -395,6 +398,16 @@ let cred = await navigator.credentials.create({
 await navigator.credentials.store(cred);
 ```
 
+## Open Questions
+
+### Requiring loginURL in a site level well-known resource
+
+One solution to preventing navigational tracking on the `loginURL` is to make the url be constant across the IDP's site.
+This restricts white label SSO use cases and is a challenge for smaller deployments.
+Instead we currently accept the navigational tracking since there is no clear path to removing `window.open` from the platform.
+Whether or not this is acceptable will depend on further analysis and discussion.
+
+
 ## Detailed design discussion
 
 ### A light touch from the browser
@@ -429,10 +442,6 @@ We make this a bit better by enabling discovery of a user-selected identity prov
 
 ## Considered alternatives
 
-### Lightweight Credentials that contain cross-site Identities
-
-This was decided against because storing identity information in the browser from an identity provider was a hard constraint for the development of FedCM, and we wish to be able to store our credentials in the browser. We also find that this reduces the complexity of privacy analysis.
-
 ### Independent Credential type
 
 Making this a distinct credential type from FedCM is a reasonable alternative, but was eventually decided against because of the semantics of this are so similar to that of an `identity` Credential. It makes more sense to be a different operating mode of FedCM, with different arguments.
@@ -445,9 +454,15 @@ Several proposals have been made to allow top-level storage access in a generic 
 
 The identity provider's use of `IdentityCredential.requests` to allow future requests looks a lot like the Login Status API in FedCM. That would be a reasonable place to re-locate this function when the Login Status API sees multi-browser-adoption. However, for now, making future requests a variation on the `allow()` call is simpler to explain and creates no external dependencies.
 
+### Browser dialog before navigation to the `loginURL`
+
+Allowing a navigation to the identity provider before any dialog does incur the potential for navigational tracking.
+However, this is no worse than permitting calls to `window.open`, especially since our use requires user activation.
+This also makes presence in the credential chooser entirely opt-in and makes it trivial to obtain an icon to show in place of UI hints, making a well-known resource unneccessary and cleaning up the architecture of the design.
+
 ### Names
 
-All names and strings are welcome to be bikeshed. Little care was put into picking the correct name for anything.
+All names and strings are welcome to be bikeshed.
 
 ## Stakeholder Feedback / Opposition
 
