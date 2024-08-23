@@ -265,7 +265,7 @@ Once the user consents, a link is made and the Promise is resolved with a Creden
 ### Scenario 4: User intends to link to an identity provider they are already logged in to, but the relying party cannot provide the origin of
 
 In this scenario, the user is already logged into an identity provider that the relying party is willing to accept, but may not be willing or able to provide the origin of.
-This may be because the relying party trusts a class of identity providers with voluntary membership (e.g. IndieAuth), or because they do not wish to provide a list of acceptable identity providers to the browser (e.g. a consortium with anonymous membership).
+This may be because the relying party trusts a class of identity providers with voluntary membership (e.g., IndieAuth), or because they do not wish to provide a list of acceptable identity providers to the browser (e.g., a consortium with anonymous membership).
 To request a credential in this way, the relying party needs to specify a provider with a given "type", like so:
 
 ```js
