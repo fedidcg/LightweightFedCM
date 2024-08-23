@@ -433,7 +433,7 @@ Whether or not this is acceptable will depend on further analysis and discussion
 
 Since any site can claim to be an identity provider with any `"effectiveType"`, we may want to allow websites further control over the elements in the UI.
 However this carries a risk of information leak to the relying party of all of the origins of a given type.
-Currently the relying party may mitigate this by validating the origin of the returned credential, or attempting to use the credential, and repeating the authentication process if it is unacceptable.
+Currently the relying party may mitigate this by validating the origin of the returned credential, or by attempting to use the credential, and by repeating the authentication process if it is unacceptable.
 
 
 ## Detailed design discussion
