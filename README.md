@@ -438,7 +438,7 @@ Here is an example of such behavior in some abstracted Javascript:
 
 ```js
 while (true) {
-  let cred = navigator.credentials.create(options);
+  let cred = navigator.credentials.get(options);
   if (allowedOrigin(cred.origin) && credentialWorks(cred)) {
     break;
   }
