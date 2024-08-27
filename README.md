@@ -1,4 +1,4 @@
-# CrossSiteCookieAccessCredential
+# Lightweight FedCM
 
 
 A [Work Item](https://fedidcg.github.io/charter#work-items)
@@ -10,7 +10,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 - Johann Hofmann (Google Chrome)
 
 ## Participate
-- https://github.com/fedidcg/CrossSiteCookieAccessCredential/issues
+- https://github.com/fedidcg/LightweightFedCM/issues
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
