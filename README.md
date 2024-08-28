@@ -24,11 +24,15 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
   - [Scenario 1: User intends to link to an identity provider they are not logged into](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
   - [Scenario 2: User logs in with one of many identity providers, or other types of credentials](#scenario-2-user-logs-in-with-one-of-many-identity-providers-or-other-types-of-credentials)
   - [Scenario 3: User intends to link to an identity provider they are already logged in to](#scenario-3-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
+  - [Scenario 4: User intends to link to an identity provider they are already logged in to, but the relying party cannot provide the origin of](#scenario-4-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to-but-the-relying-party-cannot-provide-the-origin-of)
 - [Relying Party API, Getting a Credential](#relying-party-api-getting-a-credential)
   - [FedCM Integration](#fedcm-integration)
 - [Relying Party API, Using a Credential](#relying-party-api-using-a-credential)
 - [Identity Provider API, Creating a Credential](#identity-provider-api-creating-a-credential)
 - [Identity Provider API, Attaching Account Information to a Credential](#identity-provider-api-attaching-account-information-to-a-credential)
+- [Open Questions](#open-questions)
+  - [Requiring loginURL in a site level well-known resource](#requiring-loginurl-in-a-site-level-well-known-resource)
+  - [Allowing the relying party to control credentials that appear in the credential chooser](#allowing-the-relying-party-to-control-credentials-that-appear-in-the-credential-chooser)
 - [Detailed design discussion](#detailed-design-discussion)
   - [A light touch from the browser](#a-light-touch-from-the-browser)
   - [Using the Credential Manager](#using-the-credential-manager)
@@ -42,7 +46,6 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
   - [requestStorageAccessFor, top-level-storage-access, Forward Declared Storage Access, the old Storage Access API](#requeststorageaccessfor-top-level-storage-access-forward-declared-storage-access-the-old-storage-access-api)
   - [Login Status API](#login-status-api)
   - [Browser dialog before navigation to the `loginURL`](#browser-dialog-before-navigation-to-the-loginurl)
-  - [Requiring loginURL in a site level well-known resource](#requiring-loginurl-in-a-site-level-well-known-resource)
   - [Names](#names)
 - [Stakeholder Feedback / Opposition](#stakeholder-feedback--opposition)
 - [Acknowledgements](#acknowledgements)
@@ -254,10 +257,28 @@ let credential = await navigator.credentials.get({
   }
 });
 ```
+
 The browser looks into the credential store and sees that there is a credential this is effective for `example.com` from `login.idp.net`.
 The browser give the user a "credential chooser" UI that allows them to share their account at `login.idp.net` with `example.com`.
 Once the user consents, a link is made and the Promise is resolved with a Credential.
 
+### Scenario 4: User intends to link to an identity provider they are already logged in to, but the relying party cannot provide the origin of
+
+In this scenario, the user is already logged into an identity provider that the relying party is willing to accept, but may not be willing or able to provide the origin of.
+This may be because the relying party trusts a class of identity providers with voluntary membership (e.g., IndieAuth), or because they do not wish to provide a list of acceptable identity providers to the browser (e.g., a consortium with anonymous membership).
+To request a credential in this way, the relying party needs to specify a provider with a given "type", like so:
+
+```js
+let credential = await navigator.credentials.get({
+  'identity' : {
+    'providers' : [
+      {
+        type : "example-string-to-match",
+      },
+    ]
+  }
+});
+```
 
 ## Relying Party API, Getting a Credential
 
@@ -345,13 +366,14 @@ await document.requestStorageAccess();
 
 ## Identity Provider API, Creating a Credential
 
-The identity provider needs to specify at least one of two arguments when creating the credential (`effectiveOrigins` or `effectiveQueryURL`) to tell the browser which origins the credential is [effective](https://w3c.github.io/webappsec-credential-management/#credential-effective) for. A list of origins may be provided to `effectiveOrigins` if the list of relying parties may be made public and is known ahead of time. If the list of relying parties is dynamic or private, the identity provider may provide an HTTP-endpoint with `effectiveQueryURL` that will respond successfully to a CORS request from the relying party with `Sec-Fetch-Dest: web-identity` if the relying party can use the credential at that time.
+The identity provider needs to specify at least one of three arguments when creating the credential (`effectiveOrigins`, `effectiveType`, or `effectiveQueryURL`) to tell the browser the origins for which the credential is [effective](https://w3c.github.io/webappsec-credential-management/#credential-effective). A list of origins may be provided to `effectiveOrigins` if the list of relying parties may be made public and is known ahead of time. If the list of relying parties is dynamic or private, the identity provider may provide an HTTP-endpoint with `effectiveQueryURL` that will respond successfully to a CORS request from the relying party with `Sec-Fetch-Dest: web-identity` if the relying party can use the credential at that time. Also, a string may be provided as the `effectiveType` to allow a relying party to enable out-of-band negotiation with one or a consortium of identity providers.
 
 ```js
 let cred = await navigator.credentials.create({
   identity : {
     effectiveOrigins: ["https://rp1.biz", "https://rp2.info"], // optional
     effectiveQueryURL: "https://api.login.idp.net/v1/foo", // optional
+    effectiveType: "example-string-to-match", // optional
     token: "data to be given to any RP the user consents to and this is effective for.",
   }
 });
@@ -406,6 +428,23 @@ One solution to preventing navigational tracking on the `loginURL` is to make th
 This restricts white label SSO use cases and is a challenge for smaller deployments.
 Instead we currently accept the navigational tracking since there is no clear path to removing `window.open` from the platform.
 Whether or not this is acceptable will depend on further analysis and discussion.
+
+### Allowing the relying party to control credentials that appear in the credential chooser
+
+Since any site can claim to be an identity provider with any `"effectiveType"`, we may want to allow websites further control over the elements in the UI.
+However this carries a risk of information leak to the relying party of all of the origins of a given type.
+Currently the relying party may mitigate this by validating the origin of the returned credential, or by attempting to use the credential, and by repeating the authentication process if it is unacceptable.
+Here is an example of such behavior in some abstracted Javascript:
+
+```js
+while (true) {
+  let cred = navigator.credentials.get(options);
+  if (allowedOrigin(cred.origin) && credentialWorks(cred)) {
+    break;
+  }
+}
+useCredential(cred);
+```
 
 
 ## Detailed design discussion
