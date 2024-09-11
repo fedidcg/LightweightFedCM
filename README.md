@@ -56,7 +56,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 
 The goal of this project is to provide a purpose-built API for enabling secure and user-mediated access to cross-site top-level unpartitioned cookies. 
 This is accomplished with integration with the [Credential Management API](https://w3c.github.io/webappsec-credential-management/) to enable easy integration with alternative authentication mechanisms.
-A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec the browser ensures there is appropriate user mediation and identity provider opt-in. With those assurances, the browser may also decide there is no additional privacy loss associated with access to unpartitioned state, and choose to automatically grant access to Storage Access requests.
+A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec. The browser ensures there is appropriate user mediation and identity provider opt-in. With those assurances, the browser may also decide there is no additional privacy loss associated with access to unpartitioned state, and choose to automatically grant access to Storage Access requests.
 
 ## TL;DR
 
