@@ -345,7 +345,7 @@ navigator.credentials.get({
 
 ## Relying Party API, Using a Credential
 
-The RP can use the Credential as an object once it is obtained as it would with FedCM. This will, for now, only be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal.](https://github.com/w3c-fedid/multi-idp).
+The RP can use the Credential as an object once it is obtained, as it would with FedCM. This will, for now, only be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal.](https://github.com/w3c-fedid/multi-idp).
 
 ```js
 let credential = await navigator.credentials.get({
