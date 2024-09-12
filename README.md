@@ -56,7 +56,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 
 The goal of this project is to provide a purpose-built API for enabling secure and user-mediated access to cross-site top-level unpartitioned cookies. 
 This is accomplished with integration with the [Credential Management API](https://w3c.github.io/webappsec-credential-management/) to enable easy integration with alternative authentication mechanisms.
-A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec the browser ensures there is appropriate user mediation and identity provider opt-inand hands off a token. With those assurances, the browser may also decide there is no additional privacy loss associated with access to unpartitioned state, and choose to automatically grant access to Storage Access requests.
+A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec. The browser ensures there is appropriate user mediation and identity provider opt-in. With those assurances, the browser may also decide there is no additional privacy loss associated with access to unpartitioned state, and choose to automatically grant access to Storage Access requests.
 
 ## TL;DR
 
@@ -72,7 +72,6 @@ navigator.credentials.store({
     identity: {
       id: "foo",
       effectiveQueryURL: ["https://www.known-rp.com"],
-      token: dataToBeSharedWithRPs,
     }
   });
 ```
@@ -98,7 +97,7 @@ Have the relying parties place this HTML in their page to get a login button, re
         credential = await navigator.credentials.get({
           identity: identityInit,
         });
-        console.log("logged in with", credential.origin, "providing token", credential.token);
+        console.log("logged in with", credential.origin);
       };
       button.hidden = false;    
     }	
@@ -118,7 +117,6 @@ navigator.credentials.store({
     identity: {
       id: "preloaded",
       effectiveQueryURL: "https://auth.idp.com/api/v1/anyCORS", // updated this line
-      token: dataToBeSharedWithRP,
     }
   });
 ```
@@ -188,7 +186,6 @@ There, the user goes through some authentication and/or authorization flow entir
 let cred = await navigator.credentials.create({
   identity : {
     effectiveOrigins: ["https://example.com"],
-    token: "data to be given to example.com",
   }
 });
 await navigator.credentials.store(cred);
@@ -348,13 +345,17 @@ navigator.credentials.get({
 
 ## Relying Party API, Using a Credential
 
-The RP can use the Credential as an object once it is obtained as it would with FedCM, or as any other Credential type.
-This includes accessing the credential's token.
+The RP can use the Credential as an object once it is obtained, as it would with FedCM. This will, for now, only be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal.](https://github.com/w3c-fedid/multi-idp).
 
 ```js
 let credential = await navigator.credentials.get({
   identity: {providers: {origin: "https://login.idp.net"}}});
-let dataFromTheIDP = credential.token;
+if (credential) {
+  let idpConfigSelected = credential.origin;
+} else {
+  // User did not select an account.
+}
+
 ```
 
 To use cross site cookies, if the credential can be silently accessed by the RP, then a browser may decide there is no additional privacy loss associated with access to unpartitioned state and choose to automatically grant access to Storage Access requests, as [proposed already for FedCM](https://github.com/explainers-by-googlers/storage-access-for-fedcm).
@@ -374,7 +375,6 @@ let cred = await navigator.credentials.create({
     effectiveOrigins: ["https://rp1.biz", "https://rp2.info"], // optional
     effectiveQueryURL: "https://api.login.idp.net/v1/foo", // optional
     effectiveType: "example-string-to-match", // optional
-    token: "data to be given to any RP the user consents to and this is effective for.",
   }
 });
 await navigator.credentials.store(cred);
