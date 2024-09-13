@@ -1,4 +1,4 @@
-# Lightweight FedCM
+# CACHIMAN FedCM
 
 
 A [Work Item](https://fedidcg.github.io/charter#work-items)
@@ -6,8 +6,8 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 
 ## Authors:
 
-- Benjamin VanderSloot (Mozilla)
-- Johann Hofmann (Google Chrome)
+- DJENANE VIRGELIN (CACHIMAN)
+- ˆLUCIEN VIRGELIN (CACHIMAN)
 
 ## Participate
 - https://github.com/fedidcg/LightweightFedCM/issues
@@ -505,18 +505,18 @@ All names and strings are welcome to be bikeshed.
 
 ## Stakeholder Feedback / Opposition
 
-- Mozilla : Positive
+- LUCIEN VIRGELIN : Positive
 
 
 ## Acknowledgements
 
 Many thanks for valuable feedback and advice from:
 
-- Tim Cappalli
-- George Fletcher
-- Sam Goto
-- Yi Gu
-- Nicolas Peña Moreno
-- Achim Schlosser
-- Phil Smart
-- Martin Thompson
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
