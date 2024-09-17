@@ -290,13 +290,14 @@ let credential = await navigator.credentials.get({
         origin: "https://login.idp.net",
         loginURL: "https://bounce.example.com/?u=https://login.idp.net/login.html?r=https://rp.net/",
         loginTarget: "redirect",
+        tokenURL: "https://auth.login.net/api/v1/refresh_token",
       },
     ]
   }
 });
 ```
 
-This example shows the use perfect for a "Log in with Foo" button, where one identity provider is presented, and if the user has not already logged in, they may be redirected to that provider's login page. This redirect behavior is only permitted when there is only one provider in the list. A provider with `loginURL` field indicates that this is the expected mode. If `loginURL` is present, but `origin` is not, its value can be inferred as the origin of the link.
+This example shows the use perfect for a "Log in with Foo" button, where one identity provider is presented, and if the user has not already logged in, they may be redirected to that provider's login page. This redirect behavior is only permitted when there is only one provider in the list. A provider with `loginURL` field indicates that this is the expected mode. If `loginURL` is present, but `origin` is not, its value can be inferred as the origin of the link. Regardless of how it gets there, when the credential is to be returned to the user, if it is present the browser fetches the `tokenURL` (which must be in the same origin as `origin`) with unpartitioned cookies to populate the `Credential`'s `token` member. 
 
 Another use example, provided below, shows how to request a credential from one of many IDPs the user may have already linked to this page.
 
@@ -345,11 +346,12 @@ navigator.credentials.get({
 
 ## Relying Party API, Using a Credential
 
-The RP can use the Credential as an object once it is obtained, as it would with FedCM. This will, for now, only be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal.](https://github.com/w3c-fedid/multi-idp).
+The RP can use the Credential as an object once it is obtained, as it would with FedCM. This can be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal.](https://github.com/w3c-fedid/multi-idp) It also provides access to a token from the IDP, provided that the `tokenURL` parameter was provided.
 
 ```js
 let credential = await navigator.credentials.get({
-  identity: {providers: {origin: "https://login.idp.net"}}});
+  identity: {providers: {origin: "https://login.idp.net", tokenURL: "https://login.idp.net/token"}}});
+let dataFromTheIDP = credential.token;
 if (credential) {
   let idpConfigSelected = credential.origin;
 } else {
