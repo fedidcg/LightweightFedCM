@@ -345,7 +345,7 @@ navigator.credentials.get({
 
 ## Relying Party API, Using a Credential
 
-The RP can use the Credential as an object once it is obtained, as it would with FedCM. This can be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal.](https://github.com/w3c-fedid/multi-idp) It also provides access to a token from the IDP, provided that the `tokenURL` parameter was provided when the credential was stored.
+The RP can use the Credential as an object once it is obtained, as it would with FedCM. This can be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal](https://github.com/w3c-fedid/multi-idp). It also provides access to a token from the IDP, provided that the `tokenURL` parameter was provided when the credential was stored.
 
 ```js
 let credential = await navigator.credentials.get({
@@ -386,7 +386,7 @@ This allows the identity provider to be used without a redirect flow if the user
 
 This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. In those cases where there are no registered identity providers or there are none that are acceptable to a user, the relying party can show fallback content that presents a set of candidate identity providers. Because the choice is not shown to users until obtaining a credential is unsuccessful, the added complexity of the interface might be easier for sites to manage.
 
-Additionally, by if a `tokenURL` is storeed on the credential, when the credential is to be returned to the user, if it is present the browser fetches the `tokenURL` with the identity provider's unpartitioned cookies to populate the returned `Credential`'s `token` member.
+Additionally, if a `tokenURL` is stored on the credential and the credential is to be returned to the user, the browser fetches the `tokenURL` with the identity provider's unpartitioned cookies to populate the `token` member of the returned `Credential`.
 
 ## Identity Provider API, Attaching Account Information to a Credential
 
