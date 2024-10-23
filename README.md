@@ -115,7 +115,7 @@ catch (e) {
 
 // In the IdP iframe, after receiving a postMessage from the toplevel document with the account ID:
 await navigator.requestStorageAccess(); // Since the user selected an account already, this will be autogranted.
-const token = (await fetch("https://example.com/login?rp=rp.example&id" + id)).text();
+const token = (await fetch("https://example.com/login?rp=rp.example&id=" + id)).text();
 // Do whatever you would usually do with your token here.
 ```
 
