@@ -136,11 +136,12 @@ let cred = await navigator.credentials.get({
 	identity: {
          mode: "active",
          providers: [{url: "https://example.com"}]
-       }
+       },
 });
 ```
 
-The browser would first try to resolve “https://example.com/.well-known/web-identity”. If the well-known file doesn’t exist (specifically, the request returns a status 404,) the browser would use “login_url” as the value of “https://” + eltd+1(“url”) (i.e. in this example, “https://example.com”). If an IdP requires a custom `login_url`, they only need to create a very simple `.well-known/identity` file:
+The browser would check the sign-in status list, 
+The browser would first try to resolve “https://example.com/.well-known/web-identity”. If the well-known file doesn’t exist (specifically, the request returns a status 404,) the browser would use “login_url” as the value of “https://” + eltd+1(“url”) (i.e. in this example, “https://example.com”). If an IdP requires a custom `login_url`, they can either a very simple `.well-known/identity` file:
 
 ```json
 {
@@ -148,23 +149,77 @@ The browser would first try to resolve “https://example.com/.well-known/web-id
 }
 ```
 
-Now, if the user doesn’t have cached account info from the login status API (or they have one that is expired), they are immediately navigated to your login page with “login_url” (either your bare eTLD+1 or a custom url – both guaranteed to not have any RP link decoration) to remedy that situation.
+Or the IdP can specify the `login_url` as part of their `navigator.login.setStatus` call:
 
-### Adding a Token
+```js
+navigator.login.setStatus("logged-in", {
+	accounts: [{
+		id: "1234",
+		name: "John Doe",
+		email: "foobar@example.com",
+    picture: "https://example.com/users/foobar.jpg",
+  }],
+  apiConfig: {
+    login_url: "/login.html";
+  }
+  expiration: 86_400_000 // 24 hours
+});
+```
 
-If it's useful for RPs to get access to some sort of token with which they can make API calls, an IdP can add a `config.json` and an `id_assertion_endpoint`, just like in "full" FedCM.
+Now, if the user doesn’t have cached account info from the login status API (or they have one that is expired), the user agent can present them with the option to sign in with that IdP.
 
-### Limiting RP use of IdPs
 
-IdPs that wish to limit which RPs can make use of user accounts can implement this by adding a `config.json` and a `client_metadata_endpoint`, just like in "full" FedCM.
+### Considerations for Supplying IdP Configuration in setStatus
 
-## Interaction with Other FedCM Features
+Most features of "Full" FedCM should still be available if the `navigator.login.setStatus` implementation route is chosen.
 
-### Handling the Disclosure Prompt
+#### `client_metadata_endpoint` ❗
 
-FedCM, by default, makes a distinction between sign-up and sign-in via a property called approved_clients in the user profile information: if the clientId passed in the JS call is not a member of approved_clients, it means that this client was never approved previously by the user.
+Since the `client_metadata_endpoint` *is* invoked with referrer details, the IdP could store a decorated link that is unique to the user, and then join that unique ID with the request origin header. As a result, IdPs that wish to avoid the need for a `.well_known/web-identity` and `config.json` would need to define `privacy_policy_url` and `terms_of_service_url` directly in the `setStatus` call instead of via `client_metadata_endpoint`.
 
-This could also be accomplished client-side only by passing a list of approved_clients into the login status API call:
+```js
+navigator.login.setStatus("logged-in", {
+	accounts: [{
+		id: "1234",
+		name: "John Doe",
+		email: "foobar@example.com",
+  }],
+  apiConfig: {
+    terms_of_service_url: "https://example.com/tos.html",
+    privacy_policy_url: "https://example.com/privacy-policy.html",
+  },
+});
+```
+
+This has also been [suggested in discussions around the IdP Registration API](https://github.com/w3c-fedid/idp-registration/issues/8).
+
+Unfortunately, this removes the ability to avoid reputational attacks and prevent the browser UI that presents the IdP alongside the RP. IdPs that are sensitive to this kind of attack would have the option to supply a `.well_known/web-identity` and `config.json` and configure the `client_metadata_endpoint` to return an error if the origin does not match their allowlist, as in "full" FedCM.
+
+#### `accounts_endpoint` ✔️
+
+Since the `accounts_endpoint` is invoked without referrer details, it shouldn't cause an IdP to become aware of the user's visit to an RP if the IdP is allowed to define it via `setStatus` and not require a matching `.well_known/web-identity` and JSON config URL. Since credentials are already being sent with this request, link decoration by the IdP would not provide them with any new information.
+
+#### `id_assertion_endpoint` ✔️
+
+There are no special considerations for this, since this is only invoked after the user has confirmed that they want to link their identity between the RP and IdP.
+
+#### `disconnect_endpoint` ✔️
+
+Supplying this in `n.l.setStatus` should be fine, since this will only be invoked after a user has linked their account in the first place.
+
+#### `branding` ✔️
+
+Supplying this in `n.l.setStatus` should be fine, with the caveat that the icon URLs provided must be retrieved when `setStatus` is called, *not* when the RP calls `n.c.get`.
+
+#### `login_url` ❗
+
+The primary caveat is that if a `login_url` is supplied in `setStatus`, it may include identifying information for the user before the user has allowed linking between the RP and IdP. This can be partially alleviated by not supporting an RP-supplied `loginHint` or `domainHint` that would allow the IdP to create that linkage too early in the user journey for user permission to be gathered. The user agent may also choose to require additional confirmation before navigation to the loginUrl in this case.
+
+#### Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`
+
+FedCM, by default, makes a distinction between sign-up and sign-in via a property called approved_clients in the user profile information that is received in the [fetch the accounts] step: [https://w3c-fedid.github.io/FedCM/#fetch-the-accounts](): if the clientId passed in the JS call is not a member of approved_clients, it means that this client was never approved previously by the user.
+
+This could also be accomplished client-side by passing a list of approved_clients into the login status API call:
 
 ```js
 navigator.login.setStatus("logged-in", {
@@ -173,20 +228,6 @@ navigator.login.setStatus("logged-in", {
          approved_clients: ["https://rp.example"],
          // ... other fields
       }]
-});
-```
-
-The prompt also takes the RPs Privacy Policy and Terms of Service, which would normally be passed via the client_metadata_endpoint, but in the absence of one, could be passed in the JS call by the RP. This has also been [suggested in discussions around the IdP Registration API](https://github.com/w3c-fedid/idp-registration/issues/8).
-
-```js
-const {profile: {id}} = await navigator.credentials.get({
-  identity: {
-        providers: [{url: "https://example.com"}],
-        rp: {
-          privacyPolicy: "https://rp.example/pp.html",
-          termsOfService: "https://rp.example/tos.html",
-        }
-      }
 });
 ```
 
@@ -251,7 +292,6 @@ Sending `Login-Status: logged-out` clears the profile information along with the
 ## Open Questions
 
 * Should we include the profile information in the Login-Status header?
-* How does approved client information work with multiple accounts?
 * Given the lower barrier to entry and risk of abuse, should we support passive mode for Lightweight FedCM at all?
 
 ### Allowing the relying party to control credentials that appear in the credential chooser
