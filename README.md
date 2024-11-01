@@ -21,14 +21,19 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 - [Incremental Deployment of FedCM](#incremental-deployment-of-fedcm)
   - [Passive Mode Or Active Mode Without Fallback](#passive-mode-or-active-mode-without-fallback)
   - [Active Mode: Handling the Signed-Out Case](#active-mode-handling-the-signed-out-case)
-  - [Adding a Token](#adding-a-token)
-  - [Limiting RP use of IdPs](#limiting-rp-use-of-idps)
-- [Interaction with Other FedCM Features](#interaction-with-other-fedcm-features)
-  - [Handling the Disclosure Prompt](#handling-the-disclosure-prompt)
+- [Considerations for Supplying IdP Configuration in setStatus](#considerations-for-supplying-idp-configuration-in-setstatus)
+  - [`client_metadata_endpoint` ❗](#client_metadata_endpoint-)
+  - [`accounts_endpoint` ✔️](#accounts_endpoint-)
+  - [`id_assertion_endpoint` ✔️](#id_assertion_endpoint-)
+  - [`disconnect_endpoint` ✔️](#disconnect_endpoint-)
+  - [`branding` ✔️](#branding-)
+  - [`login_url` ❗](#login_url-)
+- [Interaction with other FedCM Features](#interaction-with-other-fedcm-features)
+  - ["Login-Status" Headers](#login-status-headers)
+  - [Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`](#distinguishing-between-sign-up-and-sign-in-without-an-accounts_endpoint)
   - [Handling Selective Disclosure with the Field Selector](#handling-selective-disclosure-with-the-field-selector)
   - [Handling Multiple IdPs](#handling-multiple-idps)
   - [IdP Registration: Handling "any" IdP](#idp-registration-handling-any-idp)
-  - ["Login-Status" Headers](#login-status-headers)
 - [Open Questions](#open-questions)
   - [Allowing the relying party to control credentials that appear in the credential chooser](#allowing-the-relying-party-to-control-credentials-that-appear-in-the-credential-chooser)
 - [Detailed design discussion](#detailed-design-discussion)
@@ -169,11 +174,11 @@ navigator.login.setStatus("logged-in", {
 On the other hand, if the user doesn’t have cached account info from the login status API (or if their cached info has expired), the user agent can present the user with the option to sign in with that IdP.
 
 
-### Considerations for Supplying IdP Configuration in setStatus
+## Considerations for Supplying IdP Configuration in setStatus
 
 Most features of "Full" FedCM should still be available if the `navigator.login.setStatus` implementation route is chosen.
 
-#### `client_metadata_endpoint` ❗
+### `client_metadata_endpoint` ❗
 
 Since the `client_metadata_endpoint` is invoked with referrer details before the user has selected the IdP, an IdP that wished to track the user could store a decorated link that is unique to the user, and then join that unique ID with the request origin header. In order to prevent this, the `client_metadata_endpoint` parameter should only be used when read from a `configURL` supplied by an RP with the same `.well-known/web-identity` constraints as defined in the full FedCM specification, not supplied via a `setStatus` call. IdPs that wish to avoid the need for a `.well_known/web-identity` and `config.json` could instead define a `privacy_policy_url` and a `terms_of_service_url` directly in the `setStatus` call instead of via `client_metadata_endpoint`.
 
@@ -195,29 +200,37 @@ This has also been [suggested in discussions around the IdP Registration API](ht
 
 Unfortunately, this removes the ability to avoid reputational attacks and to prevent the browser UI from presenting the IdP alongside the RP. IdPs that are sensitive to this kind of attack could supply a `.well_known/web-identity` and `config.json` and configure the `client_metadata_endpoint` to return an error if the origin does not match their allow-list, as in "full" FedCM.
 
-#### `accounts_endpoint` ✔️
+### `accounts_endpoint` ✔️
 
-Since the `accounts_endpoint` is invoked without referrer details, it shouldn't cause an IdP to become aware of the user's visit to an RP, even if the IdP is allowed to define it via `setStatus` and not require a matching `.well_known/web-identity` and JSON config URL. Since credentials are already being sent with the request, link decoration by the IdP would not provide them with any new information.
+Since the `accounts_endpoint` is invoked without referrer details, it shouldn't cause an IdP to become aware of the user's visit to an RP, even if the IdP is allowed to define it via `setStatus` and not require a matching `.well_known/web-identity` and JSON config URL. Since credentials are already being sent with the request, link decoration by the IdP would not provide them with any new information. Because the `setStatus` is occurring on the IdP's origin ahead of time, there's no way to smuggle the RP's identity to the IdP before the user has linked their identity.
 
-#### `id_assertion_endpoint` ✔️
+### `id_assertion_endpoint` ✔️
 
 There are no special considerations for this, since this is only invoked after the user has confirmed that they want to link their identity between the RP and IdP.
 
-#### `disconnect_endpoint` ✔️
+### `disconnect_endpoint` ✔️
 
 Supplying this in `n.l.setStatus` should be fine, since this will only be invoked after a user has linked their account in the first place.
 
-#### `branding` ✔️
+### `branding` ✔️
 
 Supplying this in `n.l.setStatus` should be fine, with the caveat that the icon URLs provided must be retrieved when `setStatus` is called, *not* when the RP calls `n.c.get`.
 
-#### `login_url` ❗
+### `login_url` ❗
 
 The primary caveat is that if a `login_url` is supplied in `setStatus`, it could include identifying information for the user before the user has allowed linking between the RP and IdP. This can be partially alleviated by not supporting an RP-supplied `loginHint` or `domainHint` that would allow the IdP to create that linkage too early in the user journey for user permission to be gathered. The user agent can also choose to require additional confirmation before navigating to the loginUrl.
 
-#### Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`
+## Interaction with other FedCM Features
 
-By default, FedCM makes a distinction between `sign-up` and `sign-in` via a property in the user profile information, called `approved_clients`, that is received in the [fetch the accounts](https://w3c-fedid.github.io/FedCM/#fetch-the-accounts) step: if the `clientId` passed in the JS call is not a member of `approved_clients`, it means that this client was never previously approved by the user.
+### "Login-Status" Headers
+
+An IdP sending `Login-Status: logged-in` refreshes the expiration timer on the stored profile information.
+
+Sending `Login-Status: logged-out` clears the profile information along with the login status bit.
+
+### Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`
+
+By default, FedCM makes a distinction between `sign-up` and `sign-in` via a property in the user profile information, called `approved_clients`, that is received in the [fetch the accounts](https://w3c-fedid.github.io/FedCM/#fetch-the-accounts) step: if the `clientId` passed in the `navigator.credentials.get()` call is not a member of `approved_clients`, it means that this client was never previously approved by the user.
 
 This could also be accomplished client-side by passing a list of `approved_clients` in the login status API call:
 
@@ -283,16 +296,11 @@ await navigator.credentials.get({
 });
 ```
 
-### "Login-Status" Headers
-
-An IdP sending `Login-Status: logged-in` refreshes the expiration timer on the stored profile information.
-
-Sending `Login-Status: logged-out` clears the profile information along with the login status bit.
-
 ## Open Questions
 
 * Should we include the profile information in the Login-Status header?
 * Given the lower barrier to entry and risk of abuse, should we support passive mode for Lightweight FedCM at all?
+* For `approved_clients`, should we support matching on the RP origin, not just the clientId?
 
 ### Allowing the relying party to control credentials that appear in the credential chooser
 
