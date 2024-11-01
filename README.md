@@ -175,7 +175,7 @@ Most features of "Full" FedCM should still be available if the `navigator.login.
 
 #### `client_metadata_endpoint` ❗
 
-Since the `client_metadata_endpoint` is invoked with referrer details, the IdP could store a decorated link that is unique to the user, and then join that unique ID with the request origin header. IdPs that wish to avoid the need for a `.well_known/web-identity` and `config.json` could instead define a `privacy_policy_url` and a `terms_of_service_url` directly in the `setStatus` call instead of via `client_metadata_endpoint`.
+Since the `client_metadata_endpoint` is invoked with referrer details before the user has selected the IdP, an IdP that wished to track the user could store a decorated link that is unique to the user, and then join that unique ID with the request origin header. In order to prevent this, the `client_metadata_endpoint` parameter should only be used when read from a `configURL` supplied by an RP with the same `.well-known/web-identity` constraints as defined in the full FedCM specification, not supplied via a `setStatus` call. IdPs that wish to avoid the need for a `.well_known/web-identity` and `config.json` could instead define a `privacy_policy_url` and a `terms_of_service_url` directly in the `setStatus` call instead of via `client_metadata_endpoint`.
 
 ```js
 navigator.login.setStatus("logged-in", {
