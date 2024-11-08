@@ -187,9 +187,11 @@ const credential = await navigator.credentials.get({
   identity: {
     provider: [{
       configURL: "https://idp.example.com/",
+    }],
+    rp: {
       termsOfService: "https://rp.example/tos.html",
       privacyPolicy: "https://rp.example/tos.html",
-    }]
+    },
   }
 });
 ```
@@ -220,7 +222,7 @@ The primary caveat is that if a `login_url` is supplied in `setStatus`, it could
 
 ### "Login-Status" Headers
 
-An IdP sending `Login-Status: logged-in` refreshes the expiration timer on the stored profile information.
+An IdP sending `Login-Status: logged-in` refreshes the expiration timer on the stored profile information by resetting the browser's last-modified timestamp for that site's Login Status information.
 
 Sending `Login-Status: logged-out` clears the profile information along with the login status bit.
 
@@ -294,8 +296,12 @@ await navigator.credentials.get({
 
 ## Open Questions
 
-* Should we include the profile information in the Login-Status header?
+* Should we allow defining the profile information and API config in the `Login-Status` header?
+* Does expiration also expire the IdP-supplied `apiConfig` or just the account information?
+* Does `Login-Status: logged-out` clear the IdP-supplied `apiConfig?`
+* Should the API config be supplied using a call to the IdP registration API instead?
 * Given the lower barrier to entry and risk of abuse, should we support passive mode for Lightweight FedCM at all?
+* Under what conditions is presenting IdP picker mandatory vs UA-implementation-defined?
 * For `approved_clients`, should we support matching on the RP origin, not just the clientId?
 
 ### Allowing the relying party to control credentials that appear in the credential chooser
