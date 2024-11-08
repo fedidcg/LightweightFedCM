@@ -178,27 +178,23 @@ On the other hand, if the user doesn’t have cached account info from the login
 
 Most features of "Full" FedCM should still be available if the `navigator.login.setStatus` implementation route is chosen.
 
-### `client_metadata_endpoint` ❗
+### `client_metadata_endpoint` ❌
 
-Since the `client_metadata_endpoint` is invoked with referrer details before the user has selected the IdP, an IdP that wished to track the user could store a decorated link that is unique to the user, and then join that unique ID with the request origin header. In order to prevent this, the `client_metadata_endpoint` parameter should only be used when read from a `configURL` supplied by an RP with the same `.well-known/web-identity` constraints as defined in the full FedCM specification, not supplied via a `setStatus` call. IdPs that wish to avoid the need for a `.well_known/web-identity` and `config.json` could instead define a `privacy_policy_url` and a `terms_of_service_url` directly in the `setStatus` call instead of via `client_metadata_endpoint`.
+Since the `client_metadata_endpoint` is invoked with referrer details before the user has selected the IdP, an IdP that wished to track the user could store a decorated link that is unique to the user, and then join that unique ID with the request origin header. In order to prevent this, the `client_metadata_endpoint` parameter should only be used when read from a `configURL` supplied by an RP with the same `.well-known/web-identity` constraints as defined in the full FedCM specification, not supplied via a `setStatus` call. It would then be necessary for RPs to supply these details in the `navigator.credentials.get` call. A set of parameters is proposed in a [comment on the FedCM issue tracker.](https://github.com/w3c-fedid/FedCM/issues/665).
 
 ```js
-navigator.login.setStatus("logged-in", {
-	accounts: [{
-		id: "1234",
-		name: "John Doe",
-		email: "foobar@example.com",
-  }],
-  apiConfig: {
-    terms_of_service_url: "https://example.com/tos.html",
-    privacy_policy_url: "https://example.com/privacy-policy.html",
-  },
+const credential = await navigator.credentials.get({
+  identity: {
+    provider: [{
+      configURL: "https://idp.example.com/",
+      termsOfService: "https://rp.example/tos.html",
+      privacyPolicy: "https://rp.example/tos.html",
+    }]
+  }
 });
 ```
 
-This has also been [suggested in discussions around the IdP Registration API](https://github.com/w3c-fedid/idp-registration/issues/8).
-
-Unfortunately, this removes the ability to avoid reputational attacks and to prevent the browser UI from presenting the IdP alongside the RP. IdPs that are sensitive to this kind of attack could supply a `.well_known/web-identity` and `config.json` and configure the `client_metadata_endpoint` to return an error if the origin does not match their allow-list, as in "full" FedCM.
+Unfortunately, not supporting the `client_metadata_endpoint` removes the ability of IdPs to avoid reputational attacks that involve visually associating the IdP with an unapproved and undesired RP. IdPs that are sensitive to this kind of attack could supply a `.well_known/web-identity` and `config.json` and configure the `client_metadata_endpoint` to return an error if the origin does not match their allow-list, as in "full" FedCM.
 
 ### `accounts_endpoint` ✔️
 
