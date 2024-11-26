@@ -17,25 +17,28 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 ## Table of Contents
 
 - [Introduction](#introduction)
-- [TL;DR](#tldr)
-- [Goals](#goals)
-- [Non-goals](#non-goals)
-- [Key scenarios](#key-scenarios)
-  - [Scenario 1: User intends to link to an identity provider they are not logged into](#scenario-1-user-intends-to-link-to-an-identity-provider-they-are-not-logged-into)
-  - [Scenario 2: User logs in with one of many identity providers, or other types of credentials](#scenario-2-user-logs-in-with-one-of-many-identity-providers-or-other-types-of-credentials)
-  - [Scenario 3: User intends to link to an identity provider they are already logged in to](#scenario-3-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to)
-  - [Scenario 4: User intends to link to an identity provider they are already logged in to, but the relying party cannot provide the origin of](#scenario-4-user-intends-to-link-to-an-identity-provider-they-are-already-logged-in-to-but-the-relying-party-cannot-provide-the-origin-of)
-- [Relying Party API, Getting a Credential](#relying-party-api-getting-a-credential)
-  - [FedCM Integration](#fedcm-integration)
-- [Relying Party API, Using a Credential](#relying-party-api-using-a-credential)
-- [Identity Provider API, Creating a Credential](#identity-provider-api-creating-a-credential)
-- [Identity Provider API, Attaching Account Information to a Credential](#identity-provider-api-attaching-account-information-to-a-credential)
+- [Goals and Non-Goals](#goals-and-non-goals)
+- [Incremental Deployment of FedCM](#incremental-deployment-of-fedcm)
+  - [Passive Mode Or Active Mode Without Fallback](#passive-mode-or-active-mode-without-fallback)
+  - [Active Mode: Handling the Signed-Out Case](#active-mode-handling-the-signed-out-case)
+- [Considerations for Supplying IdP Configuration in setStatus](#considerations-for-supplying-idp-configuration-in-setstatus)
+  - [`client_metadata_endpoint` ❗](#client_metadata_endpoint-)
+  - [`accounts_endpoint` ✔️](#accounts_endpoint-)
+  - [`id_assertion_endpoint` ✔️](#id_assertion_endpoint-)
+  - [`disconnect_endpoint` ✔️](#disconnect_endpoint-)
+  - [`branding` ✔️](#branding-)
+  - [`login_url` ❗](#login_url-)
+- [Interaction with other FedCM Features](#interaction-with-other-fedcm-features)
+  - ["Login-Status" Headers](#login-status-headers)
+  - [Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`](#distinguishing-between-sign-up-and-sign-in-without-an-accounts_endpoint)
+  - [Handling Selective Disclosure with the Field Selector](#handling-selective-disclosure-with-the-field-selector)
+  - [Handling Multiple IdPs](#handling-multiple-idps)
+  - [IdP Registration: Handling "any" IdP](#idp-registration-handling-any-idp)
 - [Open Questions](#open-questions)
-  - [Requiring loginURL in a site level well-known resource](#requiring-loginurl-in-a-site-level-well-known-resource)
   - [Allowing the relying party to control credentials that appear in the credential chooser](#allowing-the-relying-party-to-control-credentials-that-appear-in-the-credential-chooser)
 - [Detailed design discussion](#detailed-design-discussion)
   - [A light touch from the browser](#a-light-touch-from-the-browser)
-  - [Using the Credential Manager](#using-the-credential-manager)
+  - [Using the Credential Manager and Login Status API](#using-the-credential-manager-and-login-status-api)
   - [Identity provider opt-in per relying party](#identity-provider-opt-in-per-relying-party)
   - [Scope of the credential's effectiveness and storage access](#scope-of-the-credentials-effectiveness-and-storage-access)
   - [UI Considerations and identity provider origin](#ui-considerations-and-identity-provider-origin)
@@ -44,8 +47,6 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 - [Considered alternatives](#considered-alternatives)
   - [Independent Credential type](#independent-credential-type)
   - [requestStorageAccessFor, top-level-storage-access, Forward Declared Storage Access, the old Storage Access API](#requeststorageaccessfor-top-level-storage-access-forward-declared-storage-access-the-old-storage-access-api)
-  - [Login Status API](#login-status-api)
-  - [Browser dialog before navigation to the `loginURL`](#browser-dialog-before-navigation-to-the-loginurl)
   - [Names](#names)
 - [Stakeholder Feedback / Opposition](#stakeholder-feedback--opposition)
 - [Acknowledgements](#acknowledgements)
@@ -55,383 +56,253 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 ## Introduction
 
 The goal of this project is to provide a purpose-built API for enabling secure and user-mediated access to cross-site top-level unpartitioned cookies. 
-This is accomplished with integration with the [Credential Management API](https://w3c.github.io/webappsec-credential-management/) to enable easy integration with alternative authentication mechanisms.
+This is accomplished with integration with the [Credential Management API](https://w3c.github.io/webappsec-credential-management/) and the [Login Status API](https://w3c-fedid.github.io/login-status/#introduction) to enable easy integration with alternative authentication mechanisms.
 A site that wants a user to log in calls the `navigator.credentials.get()` function with arguments defined in this spec. The browser ensures there is appropriate user mediation and identity provider opt-in. With those assurances, the browser may also decide there is no additional privacy loss associated with access to unpartitioned state, and choose to automatically grant access to Storage Access requests.
 
-## TL;DR
-
-Do you want to share data across origins for identity purposes?
-This API gives you a way to do that.
-You can share a data string or use third party cookies via the storage access API without a prompt.
-All you have to do is store some data from the identity provider and get it from the relying party with a browser-mediated prompt.
-
-Put this code in your identity provider's page, to be run when the user is logged in, replacing the list of RP origins with your own and any data you want to share:
-
-```js
-navigator.credentials.store({
-    identity: {
-      id: "foo",
-      effectiveQueryURL: ["https://www.known-rp.com"],
-    }
-  });
-```
-
-Have the relying parties place this HTML in their page to get a login button, replacing your login URL:
-
-```html
-<button id="cscac" hidden>Login via IDP.com</button>
-<script>
-  let button = document.getElementById("cscac");
-  async function do() {
-    let identityInit = {
-      providers: [{
-	      loginURL: "https://auth.idp.com/login"
-      }]
-    };
-    let credential = await navigator.credentials.get({
-      identity: identityInit,
-      mediation: "silent",
-    });
-    if (!credential) {
-      button.onclick = () => {
-        credential = await navigator.credentials.get({
-          identity: identityInit,
-        });
-        console.log("logged in with", credential.origin);
-      };
-      button.hidden = false;    
-    }	
-  }();
-</script>
-```
+It is possible to look at this proposal as an “axiomatic base” of FedCM; simplifying FedCM down to its barest essentials that will allow it to still function in a way that provides value to both users and identity providers. One benefit of this approach is it allows for incremental adoption of full FedCM by existing identity providers. It defines useful user-agent behaviors for FedCM when some of the specified endpoints are not defined. This also has some implementation benefits for user-agent developers, as it does not require that an entirely parallel codepath be developed, tested, and maintained.
 
 
-If you don't want to declare your list of relying parties in advance, you can provide a HTTP endpoint that replies with success only to Origin headers that correspond to your relying parties.
-You may have such an endpoint already!
-This requires two changes to the code above.
-
-First, you provide the endpoint instead of the list of origins on the IDP site:
-
-```js
-navigator.credentials.store({
-    identity: {
-      id: "preloaded",
-      effectiveQueryURL: "https://auth.idp.com/api/v1/anyCORS", // updated this line
-    }
-  });
-```
-
-Second, provide that same URI to the relying parties to be used in the `identityInit` object:
-
-```js
-let identityInit = {
-      providers: [{
-        effectiveQueryURL: "https://auth.idp.com/api/v1/anyCORS", // added this line
-	      loginURL: "https://auth.idp.com/login",
-      }]
-    };
-```
-
-
-## Goals
+## Goals and Non-Goals
 
 The following use cases are all motivating to this work and it is our goal to provide an easy-to-integrate solution for them that can be integrated into the Credential Manager as a unified browser-mediated login mechanism.
 
-1. Log in with Foo buttons
-2. Single-Sign On for domains that are not same-site
-3. Revisiting a page that has already been logged in with the API and presenting only the previously used identity provider
-4. Identity providers with bounce proxies 
-5. Upgrade to [FedCM](https://fedidcg.github.io/FedCM) in browsers that support it
-6. IDP discovery, reducing the need for [NASCAR](https://indieweb.org/NASCAR_problem) pages.
-7. Allowing account-specific details in the Credential to empower the UI to show that in the Credential Chooser dialog
-8. Integrate with FedCM as a lightweight operating mode
+This feature is intended to:
+* Allow IdPs to request Storage Access with a UI that gives users more context for their choices.
+* Provide the benefits of the FedCM UX to IdPs whose system architecture or engineering budget does not permit adoption of full FedCM.
+* Improve performance and privacy properties of FedCM by moving credentialed calls to IdPs to a later point in the sign-in user journey.
+* Act as a supplement to FedCM, not an entirely parallel API surface; ideally, an understanding of FedCM should confer some understanding of Lightweight FedCM, and vice versa.
+This feature explicitly must /not/:
+* Make invisible/silent timing attacks possible for a colluding IdP and RP.
+* Create incentives for companies engaged in tracking to present themselves as a fake IdP.
+This feature is /not/ intended to:
+* Entirely eliminate the need for some serving changes on the IdP; a limited number of new endpoints are acceptable in order to support some functionality.
+* Create an entirely new type of credential or identity system.
 
-## Non-goals
+## Incremental Deployment of FedCM
 
-- Custom identity provider infrastructure
-- Generic prompts to "allow foo.com to track you"
-- Design of an identity protocol
+### Passive Mode Or Active Mode Without Fallback
 
-
-## Key scenarios
-
-These APIs together enable login and linking scenarios that I have put into a few categories.
-For all of these, imagine that an identity provider would store a credential on the user's browser when they log in.
-
-
-### Scenario 1: User intends to link to an identity provider they are not logged into
-
-In this case, our user is not even logged into this this identity provider (`idp.net`), just having navigated to this site (`example.com`).
-They first interact with some UI in the page that is clearly associated with the identity provider and the following is called.
+If you are an IdP with existing infrastructure that relies on third-party cookie access to allow streamlined sign-in, ideally you will need to make minimal changes for your services to continue functioning in a world where a significant proportion of browsers no longer support unpartitioned third party cookie access. While you could have your embedded iframe on the RP call requestStorageAccess, that would require that the user interacts with the iframe. Additionally, the requestStorageAccess prompt in that case would not provide context about why you are requesting access; the user may well decline the request without understanding that it is necessary for sign-in to work smoothly.
 
 ```js
-let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
-      {
-        loginURL : "https://login.idp.net/login.html",
-        origin: "https://login.idp.net", // may be omitted, inferred from loginURL
-      },
-    ]
-  }
+// On the IdP's sign-in page after successful auth, or whenever a
+// signed-in user visits the IdP.
+// The profile information on accounts is a dictionary of the form defined in
+// https://w3c-fedid.github.io/FedCM/#dictdef-identityprovideraccount
+navigator.login.setStatus("logged-in", {
+	accounts: [{
+		id: "1234",
+		name: "John Doe",
+		email: "foobar@example.com",
+    picture: "https://example.com/users/foobar.jpg",
+  }],
+  expiration: 86_400_000 // 24 hours
 });
+
+// navigator.login.setStatus("logged-out"); undoes the prior operation
 ```
 
-The browser sees there is no credential in the credential store that would work for `example.com`.
-So it falls back and opens the `loginURL`. The RP can choose whether to open this URL in a pop-up or via a redirect.
-The API defaults to redirecting the user to the `loginURL`.
-There, the user goes through some authentication and/or authorization flow entirely of the identity provider's choosing, after which the identity provider stores a credential with some code like this:
+Even with just this client-side change, the browser will be able to give a meaningful prompt to the user when the following code is executed on the RP side.
 
 ```js
-let cred = await navigator.credentials.create({
-  identity : {
-    effectiveOrigins: ["https://example.com"],
-  }
-});
-await navigator.credentials.store(cred);
-```
-
-Once this is done, the identity provider navigates the user back to the relying party.
-Upon return to `example.com`, the page may run the following, showing the user UI to link the identities as in Scenario 3.
-
-```js
-let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
-      {
-        origin: "https://login.idp.net",
-      },
-    ]
-  }
-});
-```
-
-Note that in the case of a popup, the credential chooser should show once the identity provider stores a credential that is effective for the pending credential request on the relying party, removing the need for the relying party to call `navigator.credentials.get` a second time.
-
-### Scenario 2: User logs in with one of many identity providers, or other types of credentials
-
-In this scenario the user has made some indication to the site that they want to log in.
-The specifics of that interaction dictate what Credential types are appropriate.
-For sake of discussion, let's say the identity providers defined here and a PasswordCredential would be good.
-The page then calls the following:
-
-```js
-let credential = await navigator.credentials.get({
-  password: true,
-  identity : {
-    providers : [
-      {
-        origin: "https://login.idp.net",
-      },
-      // ... many allowed ...
-      {
-        origin: "https://auth.example.biz",
-      },
-    ]
-  }
-});
-```
-
-Then the user is presented any account information from identity providers they have visited and stored themselves in the credential store, and password manager entries as options in the browser UI.
-Whichever is selected is returned.
-
-Note also that depending on the credential manager state, request details, and if only one credential is collected from the store, the UI may be elided.
-Or if the browser simply wants to poll for the presence of such a credential without any UI they can do that as well.
-See the [mediation requirements in the Credential Manager API](https://w3c.github.io/webappsec-credential-management/#mediation-requirements) for more details.
-
-### Scenario 3: User intends to link to an identity provider they are already logged in to
-
-In this case, our user has not used this identity provider (`login.idp.net`) on this site (`example.com`). They first interact with some UI in the page that is (hopefully) clearly associated with the identity provider. This calls the following code:
-
-```js
-let credential = await navigator.credentials.get({
-  'identity' : {
-    'providers' : [
-      {
-        origin : "https://login.idp.net",
-      },
-    ]
-  }
-});
-```
-
-The browser looks into the credential store and sees that there is a credential this is effective for `example.com` from `login.idp.net`.
-The browser give the user a "credential chooser" UI that allows them to share their account at `login.idp.net` with `example.com`.
-Once the user consents, a link is made and the Promise is resolved with a Credential.
-
-### Scenario 4: User intends to link to an identity provider they are already logged in to, but the relying party cannot provide the origin of
-
-In this scenario, the user is already logged into an identity provider that the relying party is willing to accept, but may not be willing or able to provide the origin of.
-This may be because the relying party trusts a class of identity providers with voluntary membership (e.g., IndieAuth), or because they do not wish to provide a list of acceptable identity providers to the browser (e.g., a consortium with anonymous membership).
-To request a credential in this way, the relying party needs to specify a provider with a given "type", like so:
-
-```js
-let credential = await navigator.credentials.get({
-  'identity' : {
-    'providers' : [
-      {
-        type : "example-string-to-match",
-      },
-    ]
-  }
-});
-```
-
-## Relying Party API, Getting a Credential
-
-The site that the user wants to log into needs to call the already existing method `navigator.credentials.get()`. We put our arguments under the `identity` key in the options argument, as does FedCM.
-While not shown here, this can be combined with arbitrary other credential arguments.
-
-```js
-let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
-      {
-        origin: "https://login.idp.net",
-        loginURL: "https://bounce.example.com/?u=https://login.idp.net/login.html?r=https://rp.net/",
-        loginTarget: "redirect",
-      },
-    ]
-  }
-});
-```
-
-This example shows the use perfect for a "Log in with Foo" button, where one identity provider is presented, and if the user has not already logged in, they may be redirected to that provider's login page. This redirect behavior is only permitted when there is only one provider in the list. A provider with `loginURL` field indicates that this is the expected mode. If `loginURL` is present, but `origin` is not, its value can be inferred as the origin of the link.
-
-Another use example, provided below, shows how to request a credential from one of many IDPs the user may have already linked to this page.
-
-```js
-let credential = await navigator.credentials.get({
-  identity : {
-    providers : [
-      {
-        origin: "https://login.idp.net",
-      },
-      // ... many allowed ...
-      {
-        origin: "https://auth.example.biz",
-      },
-    ]
-  }
-});
-```
-
-### FedCM Integration
-
-There are two main points that need to be integrated with FedCM. First is the provider list. The approach we take is to restrict each provider entry to either the `loginURL` member or the `configURL` member. Second is the interaction of this proposal's login with "button mode" FedCM. We allow them to coexist by saying that a FedCM request with `mode: 'button'` implies a `loginTarget: "popup"`. This is for developer convenience.
-
-```js
-navigator.credentials.get({
-  identity: {
-    mode: "button", // loginTarget: "redirect" would cause an error now.
-    providers : [
-      {
-        configURL : "https://example.com/FEDCM.json",
-      },
-      {
-        origin : "https://login.idp.net", // Actually fine!
-      },
-      {
-        loginURL : "https://auth.example.biz/login" // Invalid combination, can't have loginURL and other providers
-      },
-      {
-        configURL : "https://example.com/FEDCM.json", // This provider entry will never be valid,
-        loginURL : "https://auth.example.biz/login"   // even if it is the only one in the list.
-      },
-    ]
-  }
-})
-```
-
-## Relying Party API, Using a Credential
-
-The RP can use the Credential as an object once it is obtained, as it would with FedCM. This can be used to verify that the user has selected an account with a given IdP, providing an `origin` field on the credential by analogy to the `configUrl` from the [multi IdP proposal](https://github.com/w3c-fedid/multi-idp). It also provides access to a token from the IDP, provided that the `tokenURL` parameter was provided when the credential was stored.
-
-```js
-let credential = await navigator.credentials.get({
-  identity: {providers: {origin: "https://login.idp.net"}}});
-let dataFromTheIDP = credential.token;
-if (credential) {
-  let idpConfigSelected = credential.origin;
-} else {
-  // User did not select an account.
+try {
+  const {profile: {id, name, email, picture}} = await navigator.credentials.get({
+  	identity: {providers: [{url: "https://example.com"}]}
+  });
+  //  ... Post a message to the IdP iframe with the account ID
+catch (e) {
+  // User either manually declined the prompt or the user was logged-out;
+  // importantly, these two outcomes are indistinguishable to the RP.
 }
 
+// Browser checks the login status for https://example.com; if there's a logged-in status with account information (that isn't expired), prompt the user with that account information. If not, issue a non-credentialled request to "https://example.com/.well-known/web-identity"; since this doesn't return the correct status+MIME type in this case, the browser is able to degrade gracefully: in passive mode, without a logged in account, the prompt is simply dismissed and an exception is thrown.
+...
+
+// In the IdP iframe, after receiving a postMessage from the toplevel document with the account ID:
+await navigator.requestStorageAccess(); // Since the user selected an account already, this will be autogranted.
+const token = (await fetch("https://example.com/login?rp=rp.example&id=" + id)).text();
+// Do whatever you would usually do with your token here.
 ```
 
-To use cross site cookies, if the credential can be silently accessed by the RP, then a browser may decide there is no additional privacy loss associated with access to unpartitioned state and choose to automatically grant access to Storage Access requests, as [proposed already for FedCM](https://github.com/explainers-by-googlers/storage-access-for-fedcm).
+This approach works well with the Passive mode: if the user is not already signed in to the IdP, the browser doesn’t need to display anything. In Active Mode, the RP may wish to provide some guidance or trigger some action to get the user to refresh their IdP session, like navigating to the login page if it is known.
 
-```js
-// Inside of an idp.net iframe
-await document.requestStorageAccess();
+> [!NOTE]
+> We refer to a `url` field on the RP-side provider configurations instead of `configURL`; this is to align with future work deprecating the 
+> `configURL` parameter in favor of `url` in FedCM.
+
+### Active Mode: Handling the Signed-Out Case
+
+For Active mode, if you want to be able to gracefully handle the signed-out case, IdPs have an incremental path: allow users to login using the “url” passed by the RP or (optionally) the IdP providing a custom one.
+
+So, if an RP called:
+
+```
+let cred = await navigator.credentials.get({
+	identity: {
+         mode: "active",
+         providers: [{url: "https://example.com"}]
+       },
+});
 ```
 
-## Identity Provider API, Creating a Credential
+The browser would check the sign-in status list, 
+first by trying to resolve “https://example.com/.well-known/web-identity”. If the well-known file doesn’t exist (i.e., the request returns a status 404), the browser would use `“login_url”` as the value of `“https://” + eltd+1(“url”)` (i.e., in this example, `“https://example.com”`). If an IdP requires a custom `login_url`, they can have a very simple `.well-known/identity` file, such as the following:
 
-The identity provider needs to specify at least one of three arguments when creating the credential (`effectiveOrigins`, `effectiveType`, or `effectiveQueryURL`) to tell the browser the origins for which the credential is [effective](https://w3c.github.io/webappsec-credential-management/#credential-effective). A list of origins may be provided to `effectiveOrigins` if the list of relying parties may be made public and is known ahead of time. If the list of relying parties is dynamic or private, the identity provider may provide an HTTP-endpoint with `effectiveQueryURL` that will respond successfully to a CORS request from the relying party with `Sec-Fetch-Dest: web-identity` if the relying party can use the credential at that time. Also, a string may be provided as the `effectiveType` to allow a relying party to enable out-of-band negotiation with one or a consortium of identity providers.
+```json
+{
+   "login_url": "https://example.com/login"
+}
+```
+
+Alternatively, the IdP can specify the `login_url` as part of their `navigator.login.setStatus` call:
 
 ```js
-let cred = await navigator.credentials.create({
-  identity : {
-    effectiveOrigins: ["https://rp1.biz", "https://rp2.info"], // optional
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo", // optional
-    effectiveType: "example-string-to-match", // optional
-    tokenURL: "https://auth.login.net/api/v1/refresh_token", // optional
+navigator.login.setStatus("logged-in", {
+	accounts: [{
+		id: "1234",
+		name: "John Doe",
+		email: "foobar@example.com",
+    picture: "https://example.com/users/foobar.jpg",
+  }],
+  apiConfig: {
+    login_url: "/login.html";
+  }
+  expiration: 86_400_000 // 24 hours
+});
+```
+
+On the other hand, if the user doesn’t have cached account info from the login status API (or if their cached info has expired), the user agent can present the user with the option to sign in with that IdP.
+
+
+## Considerations for Supplying IdP Configuration in setStatus
+
+Most features of "Full" FedCM should still be available if the `navigator.login.setStatus` implementation route is chosen.
+
+### `client_metadata_endpoint` ❌
+
+Since the `client_metadata_endpoint` is invoked with referrer details before the user has selected the IdP, an IdP that wished to track the user could store a decorated link that is unique to the user, and then join that unique ID with the request origin header. In order to prevent this, the `client_metadata_endpoint` parameter should only be used when read from a `configURL` supplied by an RP with the same `.well-known/web-identity` constraints as defined in the full FedCM specification, not supplied via a `setStatus` call. It would then be necessary for RPs to supply these details in the `navigator.credentials.get` call. A set of parameters is proposed in a [comment on the FedCM issue tracker.](https://github.com/w3c-fedid/FedCM/issues/665).
+
+```js
+const credential = await navigator.credentials.get({
+  identity: {
+    provider: [{
+      configURL: "https://idp.example.com/",
+    }],
+    rp: {
+      termsOfService: "https://rp.example/tos.html",
+      privacyPolicy: "https://rp.example/tos.html",
+    },
   }
 });
-await navigator.credentials.store(cred);
 ```
 
-This allows the identity provider to be used without a redirect flow if the user has already logged in to that provider. Because of this, the credential can be one of several of this type in the credential chooser, rather than the only cross-origin credential. If the allowlist is provided, a credential will only appear in the chooser if the relying party is on its allowlist. If the allowlist is not provided, then the credential will appear in the chooser if the same link is provided by the IDP and a CORS request with `Sec-Fetch-Dest: webidentity` is successful. This is because we can only use the dynamic test endpoint after the user has agreed to use the given identity provider or if the link is identical when provided by the identity provider and relying party for privacy reasons. However, these failures should only result when the relying party or identity provider are misconfigured and can be detected dynamically.
+Unfortunately, not supporting the `client_metadata_endpoint` removes the ability of IdPs to avoid reputational attacks that involve visually associating the IdP with an unapproved and undesired RP. IdPs that are sensitive to this kind of attack could supply a `.well_known/web-identity` and `config.json` and configure the `client_metadata_endpoint` to return an error if the origin does not match their allow-list, as in "full" FedCM.
 
-This reduces the need for NASCAR pages. Since we allow identity providers to declare themselves and several that are unlinked to be included in the same credential chooser, we remove the need for NASCAR pages where a user has visited the identity provider before. In those cases where there are no registered identity providers or there are none that are acceptable to a user, the relying party can show fallback content that presents a set of candidate identity providers. Because the choice is not shown to users until obtaining a credential is unsuccessful, the added complexity of the interface might be easier for sites to manage.
+### `accounts_endpoint` ✔️
 
-Additionally, if a `tokenURL` is stored on the credential and the credential is to be returned to the user, the browser fetches the `tokenURL` with the identity provider's unpartitioned cookies to populate the `token` member of the returned `Credential`.
+Since the `accounts_endpoint` is invoked without referrer details, it shouldn't cause an IdP to become aware of the user's visit to an RP, even if the IdP is allowed to define it via `setStatus` and not require a matching `.well_known/web-identity` and JSON config URL. Since credentials are already being sent with the request, link decoration by the IdP would not provide them with any new information. Because the `setStatus` is occurring on the IdP's origin ahead of time, there's no way to smuggle the RP's identity to the IdP before the user has linked their identity.
 
-## Identity Provider API, Attaching Account Information to a Credential
+### `id_assertion_endpoint` ✔️
 
-We add optional fields to facilitate the user's selection of the credential from the credential chooser. These match the fields in the `CredentialDataMixin` from the `Credential Management Level 1` spec.
+There are no special considerations for this, since this is only invoked after the user has confirmed that they want to link their identity between the RP and IdP.
+
+### `disconnect_endpoint` ✔️
+
+Supplying this in `n.l.setStatus` should be fine, since this will only be invoked after a user has linked their account in the first place.
+
+### `branding` ✔️
+
+Supplying this in `n.l.setStatus` should be fine, with the caveat that the icon URLs provided must be retrieved when `setStatus` is called, *not* when the RP calls `n.c.get`.
+
+### `login_url` ❗
+
+The primary caveat is that if a `login_url` is supplied in `setStatus`, it could include identifying information for the user before the user has allowed linking between the RP and IdP. This can be partially alleviated by not supporting an RP-supplied `loginHint` or `domainHint` that would allow the IdP to create that linkage too early in the user journey for user permission to be gathered. The user agent can also choose to require additional confirmation before navigating to the loginUrl.
+
+## Interaction with other FedCM Features
+
+### "Login-Status" Headers
+
+An IdP sending `Login-Status: logged-in` refreshes the expiration timer on the stored profile information by resetting the browser's last-modified timestamp for that site's Login Status information.
+
+Sending `Login-Status: logged-out` clears the profile information along with the login status bit.
+
+### Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`
+
+By default, FedCM makes a distinction between `sign-up` and `sign-in` via a property in the user profile information, called `approved_clients`, that is received in the [fetch the accounts](https://w3c-fedid.github.io/FedCM/#fetch-the-accounts) step: if the `clientId` passed in the `navigator.credentials.get()` call is not a member of `approved_clients`, it means that this client was never previously approved by the user.
+
+This could also be accomplished client-side by passing a list of `approved_clients` in the login status API call:
 
 ```js
-let cred = await navigator.credentials.create({
-  identity : {
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-    uiHint: {
-      name: "example human readable",
-      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
-    }
-  }
+navigator.login.setStatus("logged-in", {
+	accounts: [{
+         // ... other fields
+         approved_clients: ["https://rp.example"],
+         // ... other fields
+      }]
 });
-await navigator.credentials.store(cred);
 ```
 
-The browser should use this information, along with the Origin of the identity provider to construct an entry to the credential chooser that clearly communicates its meaning to the user. In the absence of these fields (or where this function has not yet been called) the identity provider's favicon and Site may be used.
+### Handling Selective Disclosure with the Field Selector
 
-We also add optional fields to allow the identity provider to restrict the lifetime of a Credential's user data, in case there are freshness requirements or deletion requirements on the identity provider. Storing a credential with a falsy value for username or iconURL should delete the previous value in the credential store.
-The identity provider can also supply a time at which the account information should expire, as follows:
+An RP can also select which attributes of the user profile they would like the IdP or user agent to disclose. Currently, the following values are allowed: `name`, `email`, `picture`, `phoneNumber`, and empty list. This aligns with [the current custom requests proposal](https://github.com/w3c-fedid/custom-requests/issues/4).
+
+This would also work client-side only, with the returned credential object only containing the specific attributes that were requested if they were stored in the `setStatus` call.
 
 ```js
-let cred = await navigator.credentials.create({
-	identity : {
-    effectiveQueryURL: "https://api.login.idp.net/v1/foo",
-    uiHint: {
-      name: "example human readable",
-      iconURL: "https://api.login.idp.net/v1/photos/exampleUser",
-      expiresAfter: 30*24*60*60*1000, // ms after this call that is the last time the name and iconURL can be used. After this they are "empty"
-    }
+const {profile: {email, name}} = await navigator.credentials.get({
+  identity: {
+        providers: [{
+          url: "https://example.com",
+          fields: ["email", "name"] // doesn't request the profile picture
+        }],
+      }
+});
+```
+
+### Handling Multiple IdPs
+
+This would extend well if the user was "logged-in" in multiple IdPs, when an RP call could be as follows:
+
+```js
+const {profile: {id, name, email, picture}} = await navigator.credentials.get({
+  identity: {
+        providers: [{
+          url: "https://idp1.example"
+        }, {
+          url: "https://idp2.example"
+        }]
+      }
+});
+```
+
+### IdP Registration: Handling "any" IdP
+
+In passive mode, an IdP can still use the IdP Registration API to expose itself for RPs that don’t want to enumerate IdPs:
+
+```js
+// Prompts the user to accept this top-level origin as an IdP
+await IdentityProvider.register("indie-auth");
+```
+
+Allows an RP to call:
+
+```js
+await navigator.credentials.get({
+  identity: {
+    providers: [{type: "indie-auth"}]
   }
 });
-await navigator.credentials.store(cred);
 ```
 
 ## Open Questions
 
-### Requiring loginURL in a site level well-known resource
-
-One solution to preventing navigational tracking on the `loginURL` is to make the url be constant across the IDP's site.
-This restricts white label SSO use cases and is a challenge for smaller deployments.
-Instead we currently accept the navigational tracking since there is no clear path to removing `window.open` from the platform.
-Whether or not this is acceptable will depend on further analysis and discussion.
+* Should we allow defining the profile information and API config in the `Login-Status` header?
+* Does expiration also expire the IdP-supplied `apiConfig` or just the account information?
+* Does `Login-Status: logged-out` clear the IdP-supplied `apiConfig?`
+* Should the API config be supplied using a call to the IdP registration API instead?
+* Given the lower barrier to entry and risk of abuse, should we support passive mode for Lightweight FedCM at all?
+* Under what conditions is presenting IdP picker mandatory vs UA-implementation-defined?
+* For `approved_clients`, should we support matching on the RP origin, not just the clientId?
 
 ### Allowing the relying party to control credentials that appear in the credential chooser
 
@@ -457,9 +328,11 @@ useCredential(cred);
 
 One core principal of this design is to get out of the identity provider's way as quickly and as much as possible. The purpose of UI when using this API should be to gather user consent to the linking of information between sites and then doing no more. Account selection, account data storage, policy presentation, and capability selection are all things we do not want to do as a browser as they are difficult and there is already an industry dedicated to solving these challenges. As such, each credential represents a connection to an identity provider, not an identity.
 
-### Using the Credential Manager
+### Using the Credential Manager and Login Status API
 
-We chose to use the credential manager here because we want this to be login-focused. It also provides a good deal of infrastructure in its design around mediation and allows us to potentially seamlessly integrate with all other login methods.
+We chose to use the credential manager on the RP side here because we want this to be login-focused. It also provides a good deal of infrastructure in its design around mediation and allows us to potentially seamlessly integrate with all other login methods.
+
+Using the Login Status API for the IdP side reflects that what is being stored is not, in and of itself, a credential. It is a declaration of the availability of a credential, with information to make it clear to the user what that credential is. It also definitively answers questions about how this functionality should behave if the user has been `Login-Status: logged-out` by an IdP.
 
 ### Identity provider opt-in per relying party
 
@@ -493,19 +366,9 @@ Making this a distinct credential type from FedCM is a reasonable alternative, b
 
 Several proposals have been made to allow top-level storage access in a generic way. All of them are not use-case specific so their messaging to the user is not clear, making consent more difficult to gather. The flows of this API are nearly identical to that of [top-level-storage-access](https://github.com/bvandersloot-mozilla/top-level-storage-access), however this proposal gains all of the beneifts of integration with the credential manager.
 
-### Login Status API
-
-The identity provider's use of `IdentityCredential.requests` to allow future requests looks a lot like the Login Status API in FedCM. That would be a reasonable place to re-locate this function when the Login Status API sees multi-browser-adoption. However, for now, making future requests a variation on the `allow()` call is simpler to explain and creates no external dependencies.
-
-### Browser dialog before navigation to the `loginURL`
-
-Allowing a navigation to the identity provider before any dialog does incur the potential for navigational tracking.
-However, this is no worse than permitting calls to `window.open`, especially since our use requires user activation.
-This also makes presence in the credential chooser entirely opt-in and makes it trivial to obtain an icon to show in place of UI hints, making a well-known resource unneccessary and cleaning up the architecture of the design.
-
 ### Names
 
-All names and strings are welcome to be bikeshed.
+All names and strings are welcome to be bikeshed. Ideally, names should be chosen to align as closely as possible with their equivalent concepts in "full" FedCM.
 
 ## Stakeholder Feedback / Opposition
 
@@ -524,3 +387,5 @@ Many thanks for valuable feedback and advice from:
 - Achim Schlosser
 - Phil Smart
 - Martin Thompson
+- Christian Biesinger
+- Erica Kovac
