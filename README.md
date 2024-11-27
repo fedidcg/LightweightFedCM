@@ -71,10 +71,12 @@ This feature is intended to:
 * Provide the benefits of the FedCM UX to IdPs whose system architecture or engineering budget does not permit adoption of full FedCM.
 * Improve performance and privacy properties of FedCM by moving credentialed calls to IdPs to a later point in the sign-in user journey.
 * Act as a supplement to FedCM, not an entirely parallel API surface; ideally, an understanding of FedCM should confer some understanding of Lightweight FedCM, and vice versa.
-This feature explicitly must /not/:
+
+This feature explicitly must *not*:
 * Make invisible/silent timing attacks possible for a colluding IdP and RP.
 * Create incentives for companies engaged in tracking to present themselves as a fake IdP.
-This feature is /not/ intended to:
+
+This feature is *not* intended to:
 * Entirely eliminate the need for some serving changes on the IdP; a limited number of new endpoints are acceptable in order to support some functionality.
 * Create an entirely new type of credential or identity system.
 
