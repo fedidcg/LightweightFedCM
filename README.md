@@ -96,7 +96,7 @@ navigator.login.setStatus("logged-in", {
 		id: "1234",
 		name: "John Doe",
 		email: "foobar@example.com",
-    picture: "https://example.com/users/foobar.jpg",
+                picture: "https://example.com/users/foobar.jpg",
   }],
   expiration: 86_400_000 // 24 hours
 });
@@ -138,7 +138,7 @@ For Active mode, if you want to be able to gracefully handle the signed-out case
 
 So, if an RP called:
 
-```
+```js
 let cred = await navigator.credentials.get({
 	identity: {
          mode: "active",
