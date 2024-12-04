@@ -7,7 +7,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
 ## Authors:
 
 - Benjamin VanderSloot (Mozilla)
-- Johann Hofmann (Google Chrome)
+- Erica Kovac (Google Chrome)
 
 ## Participate
 - https://github.com/fedidcg/LightweightFedCM/issues
@@ -390,4 +390,4 @@ Many thanks for valuable feedback and advice from:
 - Phil Smart
 - Martin Thompson
 - Christian Biesinger
-- Erica Kovac
+- Johann Hofmann
