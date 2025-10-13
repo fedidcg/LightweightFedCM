@@ -33,7 +33,7 @@ of the [Federated Identity Community Group](https://fedidcg.github.io/).
   - [`login_url`: Partially Supported](#login_url-partially-supported)
 - [Interaction with other FedCM Features](#interaction-with-other-fedcm-features)
   - ["Login-Status" Headers](#login-status-headers)
-  - [Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`](#distinguishing-between-sign-up-and-sign-in-without-an-accounts_endpoint)
+  - [`approved_clients`: Partially Supported](#approved_clients-partially-supported)
 - [Open Questions](#open-questions)
 - [Detailed design discussion](#detailed-design-discussion)
   - [Using the Credential Manager and Login Status API](#using-the-credential-manager-and-login-status-api)
@@ -220,21 +220,18 @@ An IdP sending the `Login-Status: logged-in` response header refreshes the expir
 
 Sending `Login-Status: logged-out` clears the profile information along with the login status bit.
 
-### Distinguishing between `sign-up` and `sign-in` without an `accounts_endpoint`
+### `approved_clients`: Partially Supported
 
 By default, FedCM makes a distinction between `sign-up` and `sign-in` via a property in the user profile information, called `approved_clients`, that is received in the [fetch the accounts](https://w3c-fedid.github.io/FedCM/#fetch-the-accounts) step: if the `clientId` passed in the `navigator.credentials.get()` call is not a member of `approved_clients`, it means that this client was never previously approved by the user.
 
-This could also be accomplished client-side by passing a list of `approved_clients` in the login status API call:
+This functionality should not be impacted by either the "Optional Endpoints" or "Config Push" features, but does have an obvious correct behavior for the "Accounts Push" feature.
 
-```js
-navigator.login.setStatus("logged-in", {
-	accounts: [{
-         // ... other fields
-         approved_clients: ["https://rp.example"],
-         // ... other fields
-  }]
-});
-```
+The `approved_clients` property is only useful if it is reasonably fresh. In order for `approved_clients` to be useful with Accounts Push, it would require either:
+
+* After a successful sign-up for an RP with a given IdP, the IdP would need to immediately update the stored accounts information.
+* The browser would need to automatically update the stored `approved_clients` list with the supplied `clientId`.
+
+Given that it is only a slight inconvenience for the user to be presented with the FedCM sign-up UI instead of the sign-in UI, relying only on the browser's connected accounts set should be sufficient and doesn't require any additional implementation on the part of either IdPs or browser implementers.
 
 ## Open Questions
 
@@ -244,7 +241,6 @@ navigator.login.setStatus("logged-in", {
 * Should it be possible to add or remove individual accounts from the list instead of replacing the entire account list?
 * Does `Login-Status: logged-out` clear the IdP-supplied `apiConfig?`
 * Should the API config be supplied using a call to the IdP registration API instead?
-* For `approved_clients`, should we support matching on the RP origin, not just the clientId?
 
 ## Detailed design discussion
 
