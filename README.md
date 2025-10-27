@@ -228,10 +228,10 @@ This functionality should not be impacted by either the "Optional Endpoints" or 
 
 The `approved_clients` property is only useful if it is reasonably fresh. In order for `approved_clients` to be useful with Accounts Push, it would require either:
 
-* After a successful sign-up for an RP with a given IdP, the IdP would need to immediately update the stored accounts information.
-* The browser would need to automatically update the stored `approved_clients` list with the supplied `clientId`.
+* After a successful sign-up for an RP with a given IdP, the IdP immediately updates the stored accounts information.
+* The browser automatically updates the stored `approved_clients` list with the supplied `clientId`.
 
-Given that it is only a slight inconvenience for the user to be presented with the FedCM sign-up UI instead of the sign-in UI, relying only on the browser's connected accounts set should be sufficient and doesn't require any additional implementation on the part of either IdPs or browser implementers.
+Given that it is only a slight inconvenience for the user to be presented with the FedCM sign-up UI instead of the sign-in UI, relying only on the browser's connected accounts set ought to be sufficient, i.e., no additional implementation on the part of either IdPs or browser implementers is expected to be needed.
 
 ## Open Questions
 
