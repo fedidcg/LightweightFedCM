@@ -226,7 +226,7 @@ By default, FedCM makes a distinction between `sign-up` and `sign-in` via a prop
 
 This functionality should not be impacted by either the "Optional Endpoints" or "Config Push" features, but does have an obvious correct behavior for the "Accounts Push" feature.
 
-The `approved_clients` property is only useful if it is reasonably fresh. In order for `approved_clients` to be useful with Accounts Push, it would require either:
+The `approved_clients` property is only useful if it is reasonably fresh. For `approved_clients` to be useful with Accounts Push, it would require either of the following:
 
 * After a successful sign-up for an RP with a given IdP, the IdP immediately updates the stored accounts information.
 * The browser automatically updates the stored `approved_clients` list with the supplied `clientId`.
