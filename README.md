@@ -224,7 +224,7 @@ Sending `Login-Status: logged-out` clears the profile information along with the
 
 By default, FedCM makes a distinction between `sign-up` and `sign-in` via a property in the user profile information, called `approved_clients`, that is received in the [fetch the accounts](https://w3c-fedid.github.io/FedCM/#fetch-the-accounts) step: if the `clientId` passed in the `navigator.credentials.get()` call is not a member of `approved_clients`, it means that this client was never previously approved by the user.
 
-This functionality should not be impacted by either the "Optional Endpoints" or "Config Push" features, but does have an obvious correct behavior for the "Accounts Push" feature.
+This functionality should not be impacted by either the "Optional Endpoints" or "Config Push" features, but does not have an obvious correct behavior for the "Accounts Push" feature.
 
 The `approved_clients` property is only useful if it is reasonably fresh. For `approved_clients` to be useful with Accounts Push, it would require either of the following:
 
